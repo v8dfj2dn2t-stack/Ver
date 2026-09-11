@@ -1,351 +1,573 @@
 /* ===================================================================
- * data.js — модель кампуса МГИМО: корпуса, этажи, аудитории, связи.
+ * data.js — модель кампуса МГИМО.
  *
- * ВАЖНО: расположение аудиторий носит демонстрационный (схематичный)
- * характер — оно построено по типовой логике вуза (коридорная система,
- * лестницы по краям корпуса) и не является выгрузкой реального
- * технического плана БТИ. Названия корпусов, факультетов и кафедр
- * соответствуют публично известной структуре МГИМО, но конкретные
- * номера кабинетов условны и предназначены для демонстрации поиска
- * и навигации. Данные легко заменить на подтверждённые, отредактировав
- * этот файл.
+ * СТРУКТУРА ОСНОВАНА НА ОТКРЫТЫХ ИСТОЧНИКАХ:
+ *  • Главный корпус — 4 этажа + цокольный. Номера аудиторий 4-значные:
+ *    1-я цифра — этаж, 2-я — крыло (0 — левое, 1 — правое, если стоять
+ *    лицом к центральному входу), последние две — номер аудитории.
+ *    Цокольные аудитории имеют префикс «Ц» и «БЦ».
+ *  • Новый корпус — номера 3-значные, 1-я цифра — этаж.
+ *  • Корпуса А, Б, В, Г, Новый корпус, Научная библиотека
+ *    им. И.Г. Тюлина, спорткомплекс с бассейном, столовая.
+ *  • Корпус А — двухэтажный, большую часть занимает конференц-зал,
+ *    на 1 этаже кафе «Монте-Кристо».
+ *  • Корпус Г расположен справа от главного корпуса, из него ведёт
+ *    переход в Новый корпус.
+ *
+ * ЧТО ЯВЛЯЕТСЯ РЕКОНСТРУКЦИЕЙ: точные габариты помещений и положение
+ * каждой конкретной аудитории внутри крыла. Схема повторяет реальную
+ * логику здания (крылья, центральный вход, коридорная система,
+ * нумерация), но не является выгрузкой поэтажного плана БТИ.
  * =================================================================== */
 
-const CATEGORIES = {
-  audience:  { label: 'Аудитория',              short: 'Ауд.',  color: '#3b6fb6' },
-  office:    { label: 'Кабинет преподавателя',  short: 'Каб.',  color: '#6b7280' },
-  dept:      { label: 'Кафедра',                short: 'Каф.',  color: '#8a5cf6' },
-  dean:      { label: 'Деканат',                short: 'Дек.',  color: '#c9a227' },
-  admin:     { label: 'Администрация / ректорат', short: 'Адм.', color: '#b45309' },
-  lab:       { label: 'Лаборатория',            short: 'Лаб.',  color: '#0ea5e9' },
-  computer:  { label: 'Компьютерный класс',     short: 'ПК',    color: '#10b981' },
-  language:  { label: 'Лингафонный кабинет',    short: 'Линг.', color: '#14b8a6' },
-  library:   { label: 'Библиотека / читальный зал', short: 'Библ.', color: '#7c3aed' },
-  hall:      { label: 'Актовый / конференц-зал', short: 'Зал',  color: '#dc2626' },
-  food:      { label: 'Буфет / столовая',       short: 'Буф.',  color: '#f59e0b' },
-  sport:     { label: 'Спортивный зал',         short: 'Спорт', color: '#059669' },
-  pool:      { label: 'Бассейн',                short: 'Басс.', color: '#0284c7' },
-  medical:   { label: 'Медицинский пункт',      short: 'Мед.',  color: '#ef4444' },
-  wardrobe:  { label: 'Гардероб',               short: 'Гард.', color: '#64748b' },
-  restroom:  { label: 'Туалет',                 short: 'WC',    color: '#94a3b8' },
-  service:   { label: 'Служебное помещение',    short: 'Служ.', color: '#475569' },
-  museum:    { label: 'Музей / выставочный зал', short: 'Муз.',  color: '#9333ea' },
-  atrium:    { label: 'Холл / рекреация',       short: 'Холл',  color: '#a3a3a3' },
+const GEOM = {
+  SLOT: 88,        // ширина одного помещения вдоль коридора
+  DEPTH: 112,      // глубина помещения от коридора
+  CORRIDOR: 68,    // ширина коридора
+  WALL: 7,         // толщина наружной стены
 };
 
-// ---- Геометрия схемы этажа -------------------------------------------
-const UNIT = 100;      // px на один шаг коридора
-const ROOM_W = 78;
-const ROOM_H = 54;
-const CORRIDOR_Y = 300;
-const CORRIDOR_H = 46;
-const MARGIN_X = 90;
+const CATEGORIES = {
+  audience:   { label: 'Аудитория',             short: 'Ауд.',  color: '#3b6fb6' },
+  lecture:    { label: 'Поточная аудитория',    short: 'Поток', color: '#2563eb' },
+  language:   { label: 'Лингафонный кабинет',   short: 'Линг.', color: '#14b8a6' },
+  computer:   { label: 'Компьютерный класс',    short: 'ПК',    color: '#10b981' },
+  dept:       { label: 'Кафедра',               short: 'Каф.',  color: '#8a5cf6' },
+  dean:       { label: 'Деканат',               short: 'Дек.',  color: '#c9a227' },
+  admin:      { label: 'Администрация',         short: 'Адм.',  color: '#b45309' },
+  military:   { label: 'Военная кафедра',       short: 'ВК',    color: '#4d7c0f' },
+  library:    { label: 'Библиотека',            short: 'Библ.', color: '#7c3aed' },
+  conference: { label: 'Конференц-зал',         short: 'Конф.', color: '#dc2626' },
+  hall:       { label: 'Актовый зал',           short: 'Зал',   color: '#e11d48' },
+  cafe:       { label: 'Кафе / буфет',          short: 'Кафе',  color: '#f59e0b' },
+  canteen:    { label: 'Столовая',              short: 'Стол.', color: '#f97316' },
+  sport:      { label: 'Спортивный зал',        short: 'Спорт', color: '#059669' },
+  pool:       { label: 'Бассейн',               short: 'Басс.', color: '#0284c7' },
+  medical:    { label: 'Медпункт',              short: 'Мед.',  color: '#ef4444' },
+  culture:    { label: 'Культурный центр',      short: 'Культ.',color: '#9333ea' },
+  editorial:  { label: 'Редакция / медиа',      short: 'Ред.',  color: '#0ea5e9' },
+  lobby:      { label: 'Вестибюль / холл',      short: 'Холл',  color: '#cbd5e1' },
+  wardrobe:   { label: 'Гардероб',              short: 'Гард.', color: '#64748b' },
+  restroom:   { label: 'Туалет',                short: 'WC',    color: '#94a3b8' },
+  service:    { label: 'Служебное помещение',   short: 'Служ.', color: '#475569' },
+  stairs:     { label: 'Лестница',              short: 'Лестн.',color: '#6b7280' },
+  elevator:   { label: 'Лифт',                  short: 'Лифт',  color: '#475569' },
+  entrance:   { label: 'Вход',                  short: 'Вход',  color: '#16a34a' },
+  passage:    { label: 'Переход в корпус',      short: 'Переход', color: '#0d9488' },
+};
+
+// Категории, которым номер помещения не присваивается.
+const UNNUMBERED = new Set(['lobby', 'wardrobe', 'restroom', 'service', 'stairs', 'elevator', 'entrance', 'passage']);
 
 let _uid = 0;
-function nextId(prefix) { return `${prefix}-${++_uid}`; }
+const rid = () => `r${++_uid}`;
 
-const NO_NUMBER_CATEGORIES = new Set(['wardrobe', 'atrium', 'restroom', 'service']);
+// ---- Хелперы описания помещений ------------------------------------
+/** Именованное помещение. */
+function one(number, name, cat, w) {
+  return { number: number || '', name, cat: cat || 'audience', w: w || 1 };
+}
+/** Последовательность аудиторий: seq(2053, 6) -> 2053, 2055, 2057... */
+function seq(start, count, cat, opts = {}) {
+  const step = opts.step === undefined ? 2 : opts.step;
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const n = String(start + i * step);
+    out.push({ number: n, name: opts.name ? `${opts.name} ${n}` : `${CATEGORIES[cat || 'audience'].label} ${n}`, cat: cat || 'audience', w: opts.w || 1 });
+  }
+  return out;
+}
+/** Аудитории цокольного этажа: «Ц…» и «БЦ…». */
+const ts = (from, count) => Array.from({ length: count }, (_, i) =>
+  one(`Ц${from + i}`, `Аудитория Ц${from + i}`, 'audience'));
+const bc = (from, count) => Array.from({ length: count }, (_, i) =>
+  one(`БЦ${from + i}`, `Аудитория БЦ${from + i}`, 'audience'));
+
+/** Лестничная клетка. stack — идентификатор лестницы, общий для этажей. */
+const stairs = (stack, label) => ({ number: '', name: label || 'Лестница', cat: 'stairs', w: 1, stack });
+const elevator = (stack, label) => ({ number: '', name: label || 'Лифт', cat: 'elevator', w: 1, stack });
+/** Вход с улицы. */
+const entrance = (label) => ({ number: '', name: label || 'Вход', cat: 'entrance', w: 1, isEntrance: true });
+/** Переход в соседний корпус. link — id корпуса, куда ведёт переход. */
+const passage = (link, label) => ({ number: '', name: label, cat: 'passage', w: 1, link });
 
 /**
- * Строит один этаж по компактному DSL:
- * units          — длина коридора в шагах (лестницы стоят по краям: 0 и units-1)
- * special         — явно заданные кабинеты { unit, side:'top'|'bottom', cat, num, name, capacity }
- * elevator        — есть ли лифт (ставится в середине коридора)
- * entrance        — есть ли вход с улицы на этот этаж (обычно только 1 этаж)
- * fillCat         — категория, которой автозаполняются пустые слоты
+ * Блок этажа: прямоугольный объём с коридором по центру и помещениями
+ * по сторонам. axis: 'h' — коридор идёт вправо, 'v' — вниз.
+ * (x, y) — начало осевой линии коридора. sides.a — сверху/слева,
+ * sides.b — снизу/справа.
  */
-function buildFloor(buildingCode, level, opts) {
-  const { units, special = [], elevator = false, entrance = false, fillCat = 'audience', name } = opts;
-  const occupied = new Set(special.map(r => `${r.unit}:${r.side}`));
-  const rooms = [];
-  // Автонумерация продолжается после наибольшего явно заданного номера
-  // на этаже (например 201..205), чтобы не сталкиваться с ним.
-  const levelPrefix = String(level);
-  let maxExplicit = 0;
-  special.forEach(r => {
-    if (!r.num || !r.num.startsWith(levelPrefix)) return;
-    const tail = parseInt(r.num.slice(levelPrefix.length), 10);
-    if (!isNaN(tail)) maxExplicit = Math.max(maxExplicit, tail);
-  });
-  let autoIdx = maxExplicit + 1;
-
-  function place(r) {
-    const cat = CATEGORIES[r.cat] ? r.cat : 'audience';
-    const label = CATEGORIES[cat].label;
-    // Служебные помещения (гардероб, холл, туалет и т.п.) в реальных
-    // зданиях обычно не имеют номера — не резервируем для них номер и
-    // не сдвигаем счётчик, чтобы не сталкивать их с нумерованными
-    // аудиториями/кабинетами на том же этаже.
-    const numberless = NO_NUMBER_CATEGORIES.has(cat) && !r.num;
-    const num = numberless ? '' : (r.num || `${level}${String(autoIdx++).padStart(2, '0')}`);
-    rooms.push({
-      id: nextId('room'),
-      buildingCode, level, unit: r.unit, side: r.side,
-      category: cat,
-      number: num,
-      name: r.name || `${label} ${num}`,
-      capacity: r.capacity || null,
-    });
-  }
-
-  special.forEach(place);
-
-  for (let u = 1; u <= units - 2; u++) {
-    for (const side of ['top', 'bottom']) {
-      const key = `${u}:${side}`;
-      if (occupied.has(key)) continue;
-      place({ unit: u, side, cat: fillCat });
-    }
-  }
-
-  const stairUnits = [0, units - 1];
-
-  return {
-    level,
-    name: name || `${level} этаж`,
-    units,
-    entrance,
-    elevator,
-    stairUnits,
-    rooms,
-  };
+function block(id, axis, x, y, sides, slotsOverride) {
+  const a = sides.a || [], b = sides.b || [];
+  const slots = slotsOverride || Math.max(
+    a.reduce((s, r) => s + (r.w || 1), 0),
+    b.reduce((s, r) => s + (r.w || 1), 0)
+  );
+  return { id, axis, x, y, slots, a, b };
 }
 
-function buildBuilding(id, code, name, address, description, floorsSpec) {
-  const floors = floorsSpec.map(spec => buildFloor(code, spec.level, spec));
-  return { id, code, name, address, description, floors };
+function floor(level, label, blocks, opts = {}) {
+  return { level, label, blocks, note: opts.note || '' };
 }
 
-// ---------------------------------------------------------------------
-// Корпус 1 — Главное здание
-// ---------------------------------------------------------------------
-const MAIN = buildBuilding(
-  'main', 'К1', 'Главный корпус',
+function building(id, code, name, address, about, numbering, floors) {
+  return { id, code, name, address, about, numbering, floors };
+}
+
+// ===================================================================
+// ГЛАВНЫЙ КОРПУС — Т-образный: длинный фасадный корпус (левое и правое
+// крыло) + центральная часть с главным входом, выступающая вперёд.
+// Нумерация: этаж + крыло (0 — левое, 1 — правое) + номер.
+// ===================================================================
+const SPINE_Y = 320;      // осевая линия коридора фасадного корпуса
+const LEFT_X = 60;        // начало левого крыла
+const GAP_SLOTS = 4;      // ширина центральной части (в слотах)
+
+const maxSlots = sides => Math.max(
+  (sides.a || []).reduce((s, r) => s + (r.w || 1), 0),
+  (sides.b || []).reduce((s, r) => s + (r.w || 1), 0)
+);
+
+/**
+ * Этаж главного корпуса: левое крыло — центральная часть с входом —
+ * правое крыло. Центральный объём выступает вперёд от фасадного
+ * коридора, крылья к нему примыкают через короткий коридор.
+ */
+function mainFloor(level, label, left, right, center, note) {
+  const connX = LEFT_X + maxSlots(left) * GEOM.SLOT;
+  const centerX = connX + (GAP_SLOTS * GEOM.SLOT) / 2;
+  const rightX = connX + GAP_SLOTS * GEOM.SLOT;
+
+  return floor(level, label, [
+    block('left', 'h', LEFT_X, SPINE_Y, left),
+    block('conn', 'h', connX, SPINE_Y, {}, GAP_SLOTS),
+    block('right', 'h', rightX, SPINE_Y, right),
+    block('center', 'v', centerX, SPINE_Y + GEOM.CORRIDOR / 2, center),
+  ], { note });
+}
+
+const MAIN = building(
+  'main', 'ГК', 'Главный корпус',
   'просп. Вернадского, 76',
-  'Ректорат, деканаты, актовый зал, крупные поточные аудитории.',
+  'Т-образное здание: центральная часть с главным входом, левое и правое крылья.',
+  'Номер из 4 цифр: этаж + крыло (0 — левое, 1 — правое) + номер аудитории. Например, 4016 — 4 этаж, левое крыло, комната 16.',
+  [
+    // --- Цокольный этаж (аудитории Ц и БЦ) ---
+    mainFloor(0, 'Цокольный этаж',
+      {
+        a: [stairs('L', 'Лестница в конце левого крыла'), ...bc(1, 5), one('', 'Туалет', 'restroom')],
+        b: [one('', 'Гардероб (цоколь)', 'wardrobe'), ...bc(6, 3), stairs('C', 'Лестница от аудитории 2060'), ...ts(1, 2)],
+      },
+      {
+        a: [...ts(3, 5), one('', 'Туалет', 'restroom'), stairs('R')],
+        b: [...ts(8, 4), one('', 'Буфет (цоколь)', 'cafe'), passage('library', 'Переход в библиотеку')],
+      },
+      {
+        a: [one('', 'Гардероб', 'wardrobe', 2)],
+        b: [one('', 'Технические помещения', 'service', 2)],
+      },
+      'Цокольный этаж: аудитории с префиксами «Ц» и «БЦ». До «Ц» спускаются по лестнице возле аудитории 2060, до «БЦ» — по лестнице в конце левого крыла.'
+    ),
+
+    // --- 1 этаж: вход, вестибюль, гардероб ---
+    mainFloor(1, '1 этаж',
+      {
+        a: [stairs('L'), ...seq(1003, 5, 'audience'), one('', 'Туалет', 'restroom')],
+        b: [one('', 'Гардероб', 'wardrobe', 2), ...seq(1004, 4, 'audience'), one('', 'Буфет', 'cafe')],
+      },
+      {
+        a: [...seq(1101, 5, 'audience'), one('', 'Туалет', 'restroom'), stairs('R')],
+        b: [one('', 'Медпункт', 'medical'), ...seq(1102, 5, 'audience'), passage('corpusG', 'Переход в корпус Г')],
+      },
+      {
+        a: [one('', 'Вестибюль', 'lobby', 2)],
+        b: [one('', 'Бюро пропусков', 'admin'), entrance('Главный вход')],
+      }
+    ),
+
+    // --- 2 этаж: деканаты, ауд. 2060, 2128, 2156 ---
+    mainFloor(2, '2 этаж',
+      {
+        a: [stairs('L'), ...seq(2053, 5, 'audience'), one('', 'Туалет', 'restroom')],
+        b: [
+          ...seq(2054, 3, 'audience'),
+          one('2060', 'Аудитория 2060', 'audience'),
+          stairs('C', 'Лестница в цокольный этаж'),
+          ...seq(2062, 2, 'audience'),
+        ],
+      },
+      {
+        a: [...seq(2121, 3, 'audience'), one('', 'Туалет', 'restroom'), ...seq(2151, 2, 'audience'), stairs('R')],
+        b: [one('2128', 'Аудитория 2128', 'audience'), ...seq(2130, 3, 'audience'), one('2156', 'Аудитория 2156', 'audience'), ...seq(2158, 2, 'audience')],
+      },
+      {
+        a: [one('', 'Деканат факультета международных отношений', 'dean', 2)],
+        b: [one('', 'Деканат международно-правового факультета', 'dean'), one('', 'Учебный отдел', 'admin')],
+      },
+      'Лестница возле аудитории 2060 ведёт в самый низ — к аудиториям цокольного этажа «Ц».'
+    ),
+
+    // --- 3 этаж: кафедры и аудитории ---
+    mainFloor(3, '3 этаж',
+      {
+        a: [stairs('L'), ...seq(3003, 5, 'audience'), one('', 'Туалет', 'restroom')],
+        b: [one('', 'Кафедра мировой экономики', 'dept'), ...seq(3006, 5, 'audience'), one('', 'Кафедра политической теории', 'dept')],
+      },
+      {
+        a: [...seq(3101, 5, 'audience'), one('', 'Туалет', 'restroom'), stairs('R')],
+        b: [one('', 'Кафедра международного права', 'dept'), ...seq(3104, 5, 'audience'), one('', 'Кафедра европейского права', 'dept')],
+      },
+      {
+        a: [one('', 'Конференц-зал', 'conference', 2)],
+        b: [one('', 'Приёмная ректора', 'admin'), one('', 'Ректорат', 'admin')],
+      }
+    ),
+
+    // --- 4 этаж: включает ауд. 4016 ---
+    mainFloor(4, '4 этаж',
+      {
+        a: [stairs('L'), ...seq(4011, 5, 'audience'), one('', 'Туалет', 'restroom')],
+        b: [...seq(4012, 2, 'audience'), one('4016', 'Аудитория 4016', 'audience'), ...seq(4018, 4, 'audience')],
+      },
+      {
+        a: [...seq(4101, 5, 'audience'), one('', 'Туалет', 'restroom'), stairs('R')],
+        b: [one('', 'Кафедра английского языка', 'dept'), ...seq(4104, 5, 'language'), one('', 'Кафедра французского языка', 'dept')],
+      },
+      {
+        a: [one('', 'Актовый зал', 'hall', 2)],
+        b: [one('', 'Отдел аспирантуры', 'admin'), one('', 'Профком', 'admin')],
+      }
+    ),
+  ]
+);
+
+// ===================================================================
+// НОВЫЙ КОРПУС — 6 этажей + цокольный, номера 3-значные (1-я цифра —
+// этаж). Деканаты МО и МЖ, факультет довузовской подготовки,
+// военная кафедра.
+// ===================================================================
+function nbFloor(level, label, main, wing, note) {
+  return floor(level, label, [
+    block('main', 'h', 80, 300, main),
+    block('wing', 'v', 640, 300, wing),
+  ], { note });
+}
+
+const NEWB = building(
+  'newbuilding', 'НК', 'Новый корпус',
+  'просп. Вернадского, 76, корпус Г → переход',
+  'Г-образное здание, соединено переходом с корпусом Г главного здания. Деканаты, военная кафедра, учебные аудитории.',
+  'Номер из 3 цифр: 1-я цифра — этаж, далее номер аудитории. Например, 415 — 4 этаж.',
+  [
+    floor(0, 'Цокольный этаж', [
+      block('main', 'h', 80, 300, {
+        a: [stairs('N1'), ...seq(1, 4, 'audience', { name: 'Аудитория Ц', step: 1 }).map((r, i) => one(`Ц${10 + i}`, `Аудитория Ц${10 + i}`, 'audience')), one('', 'Туалет', 'restroom')],
+        b: [one('', 'Гардероб', 'wardrobe', 2), one('', 'Буфет', 'cafe'), one('', 'Служебные помещения', 'service', 2)],
+      }),
+      block('wing', 'v', 640, 300, {
+        a: [one('', 'Склад', 'service'), stairs('N2')],
+        b: [one('', 'Копицентр', 'service'), one('', 'Техническое помещение', 'service')],
+      }),
+    ], { note: 'Спуститься в цокольный этаж можно по лестнице сразу за переходом из корпуса Г.' }),
+
+    nbFloor(1, '1 этаж',
+      {
+        a: [stairs('N1'), elevator('NE'), passage('corpusG', 'Переход в корпус Г'), ...seq(103, 3, 'audience'), one('', 'Туалет', 'restroom')],
+        b: [one('', 'Вестибюль', 'lobby'), one('', 'Гардероб', 'wardrobe'), ...seq(104, 3, 'audience'), one('', 'Буфет', 'cafe')],
+      },
+      {
+        a: [...seq(121, 2, 'audience'), stairs('N2')],
+        b: [one('', 'Охрана', 'service'), entrance('Вход в Новый корпус')],
+      }
+    ),
+
+    nbFloor(2, '2 этаж',
+      {
+        a: [stairs('N1'), elevator('NE'), one('', 'Деканат факультета международных отношений', 'dean', 2), ...seq(205, 3, 'audience'), one('', 'Туалет', 'restroom')],
+        b: [one('', 'Деканат факультета международной журналистики', 'dean', 2), ...seq(206, 4, 'audience')],
+      },
+      {
+        a: [...seq(221, 2, 'audience'), stairs('N2')],
+        b: [one('', 'Деканат факультета довузовской подготовки', 'dean', 2)],
+      }
+    ),
+
+    nbFloor(3, '3 этаж',
+      {
+        a: [stairs('N1'), elevator('NE'), ...seq(303, 5, 'audience'), one('', 'Туалет', 'restroom')],
+        b: [...seq(304, 4, 'computer'), ...seq(312, 2, 'audience')],
+      },
+      {
+        a: [...seq(321, 2, 'audience'), stairs('N2')],
+        b: [one('', 'Кафедра китайского языка', 'dept'), one('', 'Кафедра арабского языка', 'dept')],
+      }
+    ),
+
+    nbFloor(4, '4 этаж',
+      {
+        a: [stairs('N1'), elevator('NE'), ...seq(403, 5, 'language'), one('', 'Туалет', 'restroom')],
+        b: [...seq(404, 4, 'language'), ...seq(412, 2, 'audience')],
+      },
+      {
+        a: [...seq(421, 2, 'audience'), stairs('N2')],
+        b: [one('', 'Кафедра немецкого языка', 'dept'), one('', 'Кафедра испанского языка', 'dept')],
+      }
+    ),
+
+    nbFloor(5, '5 этаж',
+      {
+        a: [stairs('N1'), elevator('NE'), ...seq(503, 5, 'audience'), one('', 'Туалет', 'restroom')],
+        b: [...seq(504, 5, 'audience'), one('', 'Лаборатория', 'service')],
+      },
+      {
+        a: [...seq(521, 2, 'audience'), stairs('N2')],
+        b: [one('', 'Кафедра мировой политики', 'dept'), one('', 'Научный отдел', 'admin')],
+      }
+    ),
+
+    nbFloor(6, '6 этаж — военная кафедра',
+      {
+        a: [stairs('N1'), elevator('NE'), one('', 'Военная кафедра — учебная часть', 'military', 2), ...seq(605, 3, 'military', { name: 'Класс военной кафедры' }), one('', 'Туалет', 'restroom')],
+        b: [one('', 'Военная кафедра — кабинет начальника', 'military'), ...seq(606, 4, 'military', { name: 'Класс военной кафедры' })],
+      },
+      {
+        a: [...seq(621, 2, 'audience'), stairs('N2')],
+        b: [one('', 'Архив', 'service'), one('', 'Служебное помещение', 'service')],
+      }
+    ),
+  ]
+);
+
+// ===================================================================
+// КОРПУС А — двухэтажный, большую часть занимает конференц-зал МГИМО.
+// 1 этаж — кафе «Монте-Кристо»; 2 этаж — редакции «Вестника МГИМО
+// Университета» и портала МГИМО, офис РАС ООН, Культурный центр.
+// ===================================================================
+const CORPUS_A = building(
+  'corpusA', 'А', 'Корпус А',
+  'просп. Вернадского, 76, корпус А',
+  'Двухэтажный корпус. Большую часть занимает конференц-зал МГИМО, на первом этаже — кафе «Монте-Кристо».',
+  'Помещения обозначаются по назначению; конференц-зал занимает оба этажа по высоте.',
+  [
+    floor(1, '1 этаж — конференц-зал и кафе', [
+      block('main', 'h', 80, 300, {
+        a: [entrance('Вход в корпус А'), one('', 'Фойе конференц-зала', 'lobby'), one('А-101', 'Конференц-зал МГИМО', 'conference', 4), stairs('A1')],
+        b: [one('', 'Гардероб', 'wardrobe'), one('А-102', 'Кафе «Монте-Кристо»', 'cafe', 3), one('', 'Туалет', 'restroom'), one('', 'Служебное помещение', 'service'), one('', 'Техническое помещение', 'service')],
+      }),
+    ]),
+    floor(2, '2 этаж — редакции и Культурный центр', [
+      block('main', 'h', 80, 300, {
+        a: [one('', 'Балкон конференц-зала', 'conference', 4), one('', 'Туалет', 'restroom'), stairs('A1')],
+        b: [
+          one('А-201', 'Редакция «Вестника МГИМО Университета»', 'editorial'),
+          one('А-202', 'Портал МГИМО — Центр интернет-политики', 'editorial'),
+          one('А-203', 'Офис РАС ООН', 'admin'),
+          one('А-204', 'Культурный центр', 'culture', 2),
+          one('', 'Служебное помещение', 'service'),
+        ],
+      }),
+    ]),
+  ]
+);
+
+// ===================================================================
+// КОРПУСА Б, В, Г — учебные корпуса главного здания.
+// Корпус Г расположен справа от главного, из него переход в Новый корпус.
+// ===================================================================
+function simpleBuilding(id, code, name, address, about, numbering, floorSpecs) {
+  return building(id, code, name, address, about, numbering,
+    floorSpecs.map((spec, i) => floor(spec.level, spec.label, [
+      block('main', 'h', 80, 300, spec.sides),
+    ], { note: spec.note }))
+  );
+}
+
+const CORPUS_B = simpleBuilding(
+  'corpusB', 'Б', 'Корпус Б',
+  'просп. Вернадского, 76, корпус Б',
+  'Учебный корпус: кафедры иностранных языков и лингафонные кабинеты.',
+  'Номера аудиторий с префиксом «Б».',
   [
     {
-      level: 1, units: 9, entrance: true, elevator: true,
-      name: '1 этаж — вестибюль и актовый зал',
-      special: [
-        { unit: 1, side: 'top', cat: 'wardrobe', name: 'Гардероб' },
-        { unit: 1, side: 'bottom', cat: 'atrium', name: 'Вестибюль' },
-        { unit: 2, side: 'top', cat: 'hall', num: '101', name: 'Актовый зал', capacity: 400 },
-        { unit: 3, side: 'top', cat: 'hall', num: '101', name: 'Актовый зал (продолжение)', capacity: 400 },
-        { unit: 2, side: 'bottom', cat: 'food', name: 'Буфет' },
-        { unit: 3, side: 'bottom', cat: 'food', name: 'Столовая' },
-        { unit: 4, side: 'bottom', cat: 'medical', name: 'Медицинский пункт' },
-        { unit: 5, side: 'top', cat: 'admin', num: '110', name: 'Приёмная ректора' },
-        { unit: 5, side: 'bottom', cat: 'admin', num: '111', name: 'Ректорат' },
-        { unit: 6, side: 'top', cat: 'admin', num: '112', name: 'Управление международных связей' },
-        { unit: 6, side: 'bottom', cat: 'audience', num: '113', name: 'Приёмная комиссия', capacity: null },
-        { unit: 7, side: 'top', cat: 'restroom', name: 'Туалет' },
-        { unit: 7, side: 'bottom', cat: 'restroom', name: 'Туалет' },
-      ],
+      level: 1, label: '1 этаж',
+      sides: {
+        a: [entrance('Вход в корпус Б'), stairs('B1'), ...['Б-101', 'Б-103', 'Б-105'].map(n => one(n, `Аудитория ${n}`, 'audience')), one('', 'Туалет', 'restroom')],
+        b: [one('', 'Гардероб', 'wardrobe'), ...['Б-102', 'Б-104', 'Б-106'].map(n => one(n, `Аудитория ${n}`, 'audience')), one('', 'Буфет', 'cafe')],
+      },
     },
     {
-      level: 2, units: 9, elevator: true,
-      name: '2 этаж — деканаты',
-      special: [
-        { unit: 1, side: 'top', cat: 'dean', num: '201', name: 'Деканат факультета международных отношений' },
-        { unit: 1, side: 'bottom', cat: 'dean', num: '202', name: 'Деканат международно-правового факультета' },
-        { unit: 2, side: 'top', cat: 'dean', num: '203', name: 'Деканат факультета международной журналистики' },
-        { unit: 2, side: 'bottom', cat: 'dean', num: '204', name: 'Деканат факультета МЭО' },
-        { unit: 3, side: 'top', cat: 'audience', num: '205', name: 'Поточная аудитория 205', capacity: 150 },
-        { unit: 4, side: 'top', cat: 'audience', num: '206', name: 'Поточная аудитория 206', capacity: 150 },
-        { unit: 5, side: 'bottom', cat: 'office', num: '207', name: 'Кабинет проректора по учебной работе' },
-        { unit: 6, side: 'top', cat: 'service', name: 'Учебный отдел' },
-      ],
+      level: 2, label: '2 этаж — лингафонные кабинеты',
+      sides: {
+        a: [stairs('B1'), ...['Б-201', 'Б-203', 'Б-205'].map(n => one(n, `Лингафонный кабинет ${n}`, 'language')), one('', 'Туалет', 'restroom')],
+        b: [one('', 'Кафедра итальянского языка', 'dept'), ...['Б-202', 'Б-204'].map(n => one(n, `Лингафонный кабинет ${n}`, 'language')), one('', 'Кафедра японского языка', 'dept')],
+      },
     },
     {
-      level: 3, units: 9, elevator: true,
-      name: '3 этаж — аудитории',
-      special: [
-        { unit: 4, side: 'top', cat: 'hall', num: '305', name: 'Конференц-зал им. А.А. Громыко', capacity: 120 },
-      ],
-    },
-    {
-      level: 4, units: 7, elevator: true,
-      name: '4 этаж — аспирантура',
-      special: [
-        { unit: 1, side: 'top', cat: 'admin', num: '401', name: 'Отдел аспирантуры и докторантуры' },
-        { unit: 2, side: 'bottom', cat: 'library', num: '402', name: 'Зал диссертаций' },
-      ],
+      level: 3, label: '3 этаж',
+      sides: {
+        a: [stairs('B1'), ...['Б-301', 'Б-303', 'Б-305'].map(n => one(n, `Аудитория ${n}`, 'audience')), one('', 'Туалет', 'restroom')],
+        b: [one('', 'Кафедра португальского языка', 'dept'), ...['Б-302', 'Б-304'].map(n => one(n, `Аудитория ${n}`, 'audience')), one('', 'Преподавательская', 'service')],
+      },
     },
   ]
 );
 
-// ---------------------------------------------------------------------
-// Корпус 2 — гуманитарный (международное право, политология, экономика)
-// ---------------------------------------------------------------------
-const BLD2 = buildBuilding(
-  'corpus2', 'К2', 'Корпус 2',
-  'просп. Вернадского, 76, стр. 2',
-  'Кафедры международного права, политологии, экономического факультета.',
+const CORPUS_V = simpleBuilding(
+  'corpusV', 'В', 'Корпус В',
+  'просп. Вернадского, 76, корпус В',
+  'Учебный корпус: компьютерные классы и лаборатории.',
+  'Номера аудиторий с префиксом «В».',
   [
     {
-      level: 1, units: 8, entrance: true,
-      name: '1 этаж',
-      special: [
-        { unit: 1, side: 'top', cat: 'wardrobe', name: 'Гардероб' },
-        { unit: 1, side: 'bottom', cat: 'food', name: 'Буфет' },
-        { unit: 2, side: 'top', cat: 'computer', num: '110', name: 'Компьютерный класс №1' },
-        { unit: 2, side: 'bottom', cat: 'computer', num: '111', name: 'Компьютерный класс №2' },
-        { unit: 3, side: 'top', cat: 'restroom', name: 'Туалет' },
-      ],
+      level: 1, label: '1 этаж',
+      sides: {
+        a: [entrance('Вход в корпус В'), stairs('V1'), ...['В-101', 'В-103'].map(n => one(n, `Компьютерный класс ${n}`, 'computer')), one('', 'Туалет', 'restroom')],
+        b: [one('', 'Гардероб', 'wardrobe'), ...['В-102', 'В-104'].map(n => one(n, `Аудитория ${n}`, 'audience')), one('', 'Техническая поддержка', 'service')],
+      },
     },
     {
-      level: 2, units: 8,
-      name: '2 этаж — международное право',
-      special: [
-        { unit: 1, side: 'top', cat: 'dept', num: '201', name: 'Кафедра международного права' },
-        { unit: 1, side: 'bottom', cat: 'dept', num: '202', name: 'Кафедра европейского права' },
-        { unit: 2, side: 'top', cat: 'office', num: '203', name: 'Кабинет заведующего кафедрой МП' },
-        { unit: 6, side: 'bottom', cat: 'audience', num: '208', name: 'Поточная аудитория 208', capacity: 100 },
-      ],
-    },
-    {
-      level: 3, units: 8,
-      name: '3 этаж — политология и экономика',
-      special: [
-        { unit: 1, side: 'top', cat: 'dept', num: '301', name: 'Кафедра политической теории' },
-        { unit: 1, side: 'bottom', cat: 'dept', num: '302', name: 'Кафедра мировой экономики' },
-        { unit: 2, side: 'top', cat: 'lab', num: '303', name: 'Лаборатория экономического анализа' },
-      ],
+      level: 2, label: '2 этаж',
+      sides: {
+        a: [stairs('V1'), ...['В-201', 'В-203', 'В-205'].map(n => one(n, `Компьютерный класс ${n}`, 'computer')), one('', 'Туалет', 'restroom')],
+        b: [...['В-202', 'В-204'].map(n => one(n, `Аудитория ${n}`, 'audience')), one('', 'Лаборатория', 'service'), one('', 'Серверная', 'service')],
+      },
     },
   ]
 );
 
-// ---------------------------------------------------------------------
-// Корпус 3 — лингвистический (кафедры иностранных языков)
-// ---------------------------------------------------------------------
-const LANGS = ['английского', 'французского', 'немецкого', 'испанского', 'китайского', 'арабского', 'итальянского', 'японского', 'персидского', 'португальского'];
-
-const BLD3 = buildBuilding(
-  'corpus3', 'К3', 'Корпус 3',
-  'просп. Вернадского, 78',
-  'Кафедры иностранных языков и лингафонные кабинеты — МГИМО преподаёт более 50 языков.',
+const CORPUS_G = simpleBuilding(
+  'corpusG', 'Г', 'Корпус Г',
+  'просп. Вернадского, 76, корпус Г',
+  'Расположен справа от главного корпуса. Из него ведёт переход в Новый корпус, рядом — лестница в цокольный этаж.',
+  'Номера аудиторий с префиксом «Г».',
   [
     {
-      level: 1, units: 9, entrance: true,
-      name: '1 этаж',
-      special: [
-        { unit: 1, side: 'top', cat: 'wardrobe', name: 'Гардероб' },
-        { unit: 1, side: 'bottom', cat: 'atrium', name: 'Холл' },
-        { unit: 2, side: 'top', cat: 'dept', num: '101', name: `Кафедра ${LANGS[0]} языка №1` },
-        { unit: 2, side: 'bottom', cat: 'dept', num: '102', name: `Кафедра ${LANGS[1]} языка` },
-      ],
+      level: 1, label: '1 этаж — переход в Новый корпус',
+      sides: {
+        a: [passage('main', 'Переход в главный корпус'), stairs('G1', 'Лестница в цокольный этаж'), ...['Г-101', 'Г-103'].map(n => one(n, `Аудитория ${n}`, 'audience')), one('', 'Туалет', 'restroom')],
+        b: [one('', 'Гардероб', 'wardrobe'), ...['Г-102', 'Г-104'].map(n => one(n, `Аудитория ${n}`, 'audience')), passage('newbuilding', 'Переход в Новый корпус')],
+      },
+      note: 'Из корпуса Г можно попасть в коридор, ведущий в Новый корпус, и спуститься по ближайшей лестнице на цокольный этаж.',
     },
     {
-      level: 2, units: 9,
-      name: '2 этаж — лингафонные кабинеты',
-      fillCat: 'language',
-      special: [
-        { unit: 1, side: 'top', cat: 'dept', num: '201', name: `Кафедра ${LANGS[2]} языка` },
-        { unit: 1, side: 'bottom', cat: 'dept', num: '202', name: `Кафедра ${LANGS[3]} языка` },
-        { unit: 2, side: 'top', cat: 'language', num: '203', name: 'Лингафонный кабинет №1' },
-        { unit: 3, side: 'top', cat: 'language', num: '204', name: 'Лингафонный кабинет №2' },
-        { unit: 2, side: 'bottom', cat: 'language', num: '205', name: 'Лингафонный кабинет №3' },
-      ],
-    },
-    {
-      level: 3, units: 9,
-      name: '3 этаж — восточные и редкие языки',
-      special: [
-        { unit: 1, side: 'top', cat: 'dept', num: '301', name: `Кафедра ${LANGS[4]} языка` },
-        { unit: 1, side: 'bottom', cat: 'dept', num: '302', name: `Кафедра ${LANGS[5]} языка` },
-        { unit: 2, side: 'top', cat: 'dept', num: '303', name: `Кафедра ${LANGS[8]} языка` },
-        { unit: 2, side: 'bottom', cat: 'language', num: '304', name: 'Лингафонный кабинет №4' },
-      ],
+      level: 2, label: '2 этаж',
+      sides: {
+        a: [stairs('G1'), ...['Г-201', 'Г-203', 'Г-205'].map(n => one(n, `Аудитория ${n}`, 'audience')), one('', 'Туалет', 'restroom')],
+        b: [one('', 'Кафедра', 'dept'), ...['Г-202', 'Г-204'].map(n => one(n, `Аудитория ${n}`, 'audience')), one('', 'Преподавательская', 'service')],
+      },
     },
   ]
 );
 
-// ---------------------------------------------------------------------
-// Библиотечный корпус
-// ---------------------------------------------------------------------
-const LIB = buildBuilding(
-  'library', 'БИБ', 'Библиотечный корпус',
-  'просп. Вернадского, 76, стр. 4',
-  'Научная библиотека МГИМО — читальные залы, абонемент, книгохранилище.',
+// ===================================================================
+// НАУЧНАЯ БИБЛИОТЕКА им. И.Г. ТЮЛИНА — отдел абонементов, читальный
+// зал, читальный зал периодических изданий, справочно-библиографический
+// отдел. Соединена с главным корпусом переходом («дворец книги»).
+// ===================================================================
+const LIBRARY = building(
+  'library', 'БИБ', 'Научная библиотека им. И.Г. Тюлина',
+  'просп. Вернадского, 76 (переход из главного корпуса)',
+  'От главного входа: направо до первого поворота налево, вниз по лестнице и далее по переходу к «дворцу книги».',
+  'Помещения обозначаются по назначению.',
   [
-    {
-      level: 1, units: 7, entrance: true,
-      name: '1 этаж — абонемент',
-      special: [
-        { unit: 1, side: 'top', cat: 'wardrobe', name: 'Гардероб' },
-        { unit: 2, side: 'top', cat: 'library', num: '101', name: 'Абонемент учебной литературы' },
-        { unit: 3, side: 'top', cat: 'library', num: '102', name: 'Зал каталогов' },
-        { unit: 2, side: 'bottom', cat: 'service', name: 'Книгохранилище' },
-        { unit: 4, side: 'bottom', cat: 'restroom', name: 'Туалет' },
-      ],
-    },
-    {
-      level: 2, units: 7,
-      name: '2 этаж — читальные залы',
-      fillCat: 'library',
-      special: [
-        { unit: 1, side: 'top', cat: 'library', num: '201', name: 'Читальный зал №1 (периодика)', capacity: 60 },
-        { unit: 3, side: 'top', cat: 'library', num: '202', name: 'Читальный зал №2 (диссертации)', capacity: 40 },
-        { unit: 2, side: 'bottom', cat: 'library', num: '203', name: 'Зал редких книг' },
-      ],
-    },
+    floor(1, '1 этаж — абонемент', [
+      block('main', 'h', 80, 300, {
+        a: [passage('main', 'Переход из главного корпуса'), one('', 'Гардероб', 'wardrobe'), one('Б-1', 'Отдел абонементов', 'library', 2), one('', 'Туалет', 'restroom'), stairs('LB')],
+        b: [entrance('Вход в библиотеку'), one('Б-2', 'Справочно-библиографический отдел', 'library', 2), one('', 'Книгохранилище', 'service', 2)],
+      }),
+    ]),
+    floor(2, '2 этаж — читальные залы', [
+      block('main', 'h', 80, 300, {
+        a: [one('Б-201', 'Читальный зал', 'library', 3), one('', 'Туалет', 'restroom'), stairs('LB')],
+        b: [one('Б-202', 'Читальный зал периодических изданий', 'library', 2), one('Б-203', 'Зал электронных ресурсов', 'library', 2), one('', 'Служебное помещение', 'service')],
+      }),
+    ]),
   ]
 );
 
-// ---------------------------------------------------------------------
-// Спортивный комплекс
-// ---------------------------------------------------------------------
-const SPORT = buildBuilding(
-  'sport', 'СК', 'Спортивный комплекс',
-  'просп. Вернадского, 76, стр. 5',
-  'Игровые залы, бассейн, тренажёрные залы.',
+// ===================================================================
+// СПОРТКОМПЛЕКС И БАССЕЙН — тренажёрный зал для занятий физкультурой,
+// фитнес-зал в здании бассейна.
+// ===================================================================
+const SPORT = building(
+  'sport', 'СК', 'Спорткомплекс и бассейн',
+  'просп. Вернадского, 76 (спортивный корпус)',
+  'Игровые и тренажёрные залы, бассейн. Фитнес-зал расположен в здании бассейна.',
+  'Помещения обозначаются по назначению.',
   [
-    {
-      level: 1, units: 7, entrance: true,
-      name: '1 этаж',
-      special: [
-        { unit: 1, side: 'top', cat: 'wardrobe', name: 'Раздевалка (муж.)' },
-        { unit: 1, side: 'bottom', cat: 'wardrobe', name: 'Раздевалка (жен.)' },
-        { unit: 2, side: 'top', cat: 'pool', num: '101', name: 'Бассейн', capacity: 30 },
-        { unit: 2, side: 'bottom', cat: 'sport', num: '102', name: 'Тренажёрный зал' },
-        { unit: 4, side: 'top', cat: 'medical', name: 'Медицинский пункт' },
-      ],
-    },
-    {
-      level: 2, units: 7,
-      name: '2 этаж — игровые залы',
-      fillCat: 'sport',
-      special: [
-        { unit: 1, side: 'top', cat: 'sport', num: '201', name: 'Игровой зал (баскетбол/волейбол)', capacity: 80 },
-        { unit: 3, side: 'top', cat: 'sport', num: '202', name: 'Зал единоборств' },
-        { unit: 2, side: 'bottom', cat: 'sport', num: '203', name: 'Зал аэробики и фитнеса' },
-      ],
-    },
+    floor(1, '1 этаж — бассейн и тренажёрный зал', [
+      block('main', 'h', 80, 300, {
+        a: [entrance('Вход в спорткомплекс'), one('', 'Раздевалка (муж.)', 'wardrobe'), one('С-101', 'Бассейн', 'pool', 3), stairs('S1')],
+        b: [one('', 'Раздевалка (жен.)', 'wardrobe'), one('С-102', 'Тренажёрный зал', 'sport', 2), one('С-103', 'Фитнес-зал', 'sport', 2), one('', 'Медпункт', 'medical')],
+      }),
+    ]),
+    floor(2, '2 этаж — игровые залы', [
+      block('main', 'h', 80, 300, {
+        a: [one('С-201', 'Игровой зал (баскетбол, волейбол)', 'sport', 3), one('', 'Туалет', 'restroom'), stairs('S1')],
+        b: [one('С-202', 'Зал единоборств', 'sport', 2), one('С-203', 'Зал аэробики', 'sport', 2), one('', 'Тренерская', 'service')],
+      }),
+    ]),
   ]
 );
 
-const BUILDINGS = [MAIN, BLD2, BLD3, LIB, SPORT];
+// ===================================================================
+// СТОЛОВАЯ
+// ===================================================================
+const CANTEEN = building(
+  'canteen', 'СТ', 'Столовая',
+  'просп. Вернадского, 76 (корпус столовой)',
+  'Основная столовая университета.',
+  'Помещения обозначаются по назначению.',
+  [
+    floor(1, '1 этаж', [
+      block('main', 'h', 80, 300, {
+        a: [entrance('Вход в столовую'), one('', 'Гардероб', 'wardrobe'), one('СТ-101', 'Обеденный зал', 'canteen', 3), one('', 'Туалет', 'restroom')],
+        b: [one('СТ-102', 'Линия раздачи', 'canteen', 2), one('', 'Кухня', 'service', 2), one('СТ-103', 'Буфет', 'cafe')],
+      }),
+    ]),
+  ]
+);
 
-// ---------------------------------------------------------------------
-// Схематичное расположение корпусов на территории кампуса (для обзорной
-// карты и расчёта пешеходных расстояний между зданиями). Координаты
-// условны и не привязаны к реальной геодезии.
-// ---------------------------------------------------------------------
+const BUILDINGS = [MAIN, NEWB, CORPUS_A, CORPUS_B, CORPUS_V, CORPUS_G, LIBRARY, SPORT, CANTEEN];
+
+// ===================================================================
+// Схема территории. Взаимное расположение отражает известные связи
+// (корпус Г — справа от главного, переход в Новый корпус; библиотека —
+// через переход), но не является геодезически точным планом.
+// ===================================================================
 const CAMPUS_LAYOUT = {
-  hub: { x: 480, y: 420 },
+  hub: { x: 640, y: 560 },
   buildings: {
-    main:    { x: 460, y: 200, w: 260, h: 140, walkToHub: 60 },
-    corpus2: { x: 780, y: 260, w: 180, h: 120, walkToHub: 90 },
-    corpus3: { x: 160, y: 260, w: 180, h: 120, walkToHub: 90 },
-    library: { x: 460, y: 560, w: 200, h: 110, walkToHub: 70 },
-    sport:   { x: 780, y: 560, w: 200, h: 110, walkToHub: 140 },
+    main:         { x: 320, y: 620, w: 640, h: 150, label: 'Главный корпус', walk: 30 },
+    corpusA:      { x: 60,  y: 620, w: 200, h: 150, label: 'Корпус А',       walk: 150 },
+    corpusB:      { x: 320, y: 430, w: 190, h: 140, label: 'Корпус Б',       walk: 90 },
+    corpusV:      { x: 540, y: 430, w: 190, h: 140, label: 'Корпус В',       walk: 90 },
+    corpusG:      { x: 780, y: 430, w: 180, h: 140, label: 'Корпус Г',       walk: 90 },
+    newbuilding:  { x: 780, y: 210, w: 260, h: 170, label: 'Новый корпус',   walk: 190 },
+    library:      { x: 420, y: 210, w: 280, h: 170, label: 'Библиотека',     walk: 180 },
+    sport:        { x: 1080, y: 560, w: 220, h: 180, label: 'Спорткомплекс', walk: 260 },
+    canteen:      { x: 60,  y: 430, w: 200, h: 140, label: 'Столовая',       walk: 180 },
   },
+  // Дорожки по территории между корпусами (расстояния по улице).
+  // Корпуса, соединённые крытым переходом, отмечены kind: 'переход' —
+  // это влияет только на отрисовку связи на схеме территории.
+  links: [
+    ['main', 'corpusG', 80, 'переход'],
+    ['corpusG', 'newbuilding', 90, 'переход'],
+    ['main', 'corpusB', 110, 'переход'],
+    ['main', 'corpusV', 110, 'переход'],
+    ['main', 'library', 140, 'переход'],
+    ['main', 'corpusA', 130, 'дорожка'],
+    ['main', 'canteen', 170, 'дорожка'],
+    ['main', 'sport', 260, 'дорожка'],
+  ],
 };
 
+const SOURCES = [
+  { title: 'Карта Университета — МГИМО', url: 'https://mgimo.ru/territory/map/' },
+  { title: 'Справочник первокурсника: инфраструктура — Студенческий союз МГИМО', url: 'https://studsouz.mgimo.ru/rubrics/mgimo-guide/infrastructure/' },
+];
+
 if (typeof window !== 'undefined') {
-  window.CATEGORIES = CATEGORIES;
-  window.BUILDINGS = BUILDINGS;
-  window.CAMPUS_LAYOUT = CAMPUS_LAYOUT;
-  window.MAP_GEOM = { UNIT, ROOM_W, ROOM_H, CORRIDOR_Y, CORRIDOR_H, MARGIN_X };
+  Object.assign(window, { GEOM, CATEGORIES, UNNUMBERED, BUILDINGS, CAMPUS_LAYOUT, SOURCES, rid });
 }

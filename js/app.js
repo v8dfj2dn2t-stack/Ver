@@ -1,21 +1,21 @@
 /* ===================================================================
- * app.js — состояние приложения и связывание UI с картой/поиском/
- * маршрутизацией.
+ * app.js — состояние приложения, связывание UI, карты, поиска и
+ * построения маршрутов.
  * =================================================================== */
 
 (function () {
   const graph = buildCampusGraph(BUILDINGS, CAMPUS_LAYOUT);
-  const searchIndex = buildSearchIndex(BUILDINGS);
+  const searchIndex = buildSearchIndex(graph, BUILDINGS);
 
   const state = {
-    currentBuildingId: BUILDINGS[0].id,
-    currentLevel: BUILDINGS[0].floors[0].level,
-    showCampusOverview: true,
+    buildingId: BUILDINGS[0].id,
+    level: 1,
+    campusView: true,
     categoryFilter: null,
     highlightRoomId: null,
-    route: null,       // { path, distance, segments, fromItem, toItem }
-    routeFromItem: null,
-    routeToItem: null,
+    route: null,
+    from: null,
+    to: null,
     mode: 'explore',
   };
 
@@ -23,201 +23,195 @@
   const viewport = document.getElementById('map-viewport');
   const panzoom = createPanZoom(svg, viewport);
 
+  const $ = id => document.getElementById(id);
   const el = {
-    buildingList: document.getElementById('building-list'),
-    legend: document.getElementById('legend'),
-    floorTabs: document.getElementById('floor-tabs'),
-    breadcrumb: document.getElementById('breadcrumb'),
-    roomDetail: document.getElementById('room-detail'),
-    modeTabs: document.getElementById('mode-tabs'),
-    panelExplore: document.getElementById('panel-explore'),
-    panelRoute: document.getElementById('panel-route'),
-    globalSearch: document.getElementById('global-search'),
-    globalSearchResults: document.getElementById('global-search-results'),
-    routeFrom: document.getElementById('route-from'),
-    routeFromResults: document.getElementById('route-from-results'),
-    routeTo: document.getElementById('route-to'),
-    routeToResults: document.getElementById('route-to-results'),
-    swapBtn: document.getElementById('swap-btn'),
-    buildRouteBtn: document.getElementById('build-route-btn'),
-    routeSummary: document.getElementById('route-summary'),
-    routeSteps: document.getElementById('route-steps'),
-    zoomIn: document.getElementById('zoom-in'),
-    zoomOut: document.getElementById('zoom-out'),
-    zoomReset: document.getElementById('zoom-reset'),
-    showCampusBtn: document.getElementById('show-campus'),
+    buildingList: $('building-list'), legend: $('legend'), floorTabs: $('floor-tabs'),
+    breadcrumb: $('breadcrumb'), floorNote: $('floor-note'), roomDetail: $('room-detail'),
+    modeTabs: $('mode-tabs'), panelExplore: $('panel-explore'), panelRoute: $('panel-route'),
+    globalSearch: $('global-search'), globalSearchResults: $('global-search-results'),
+    routeFrom: $('route-from'), routeFromResults: $('route-from-results'),
+    routeTo: $('route-to'), routeToResults: $('route-to-results'),
+    swapBtn: $('swap-btn'), buildRouteBtn: $('build-route-btn'), clearRouteBtn: $('clear-route-btn'),
+    routeSummary: $('route-summary'), routeSteps: $('route-steps'),
+    zoomIn: $('zoom-in'), zoomOut: $('zoom-out'), zoomReset: $('zoom-reset'),
+    showCampusBtn: $('show-campus'), numberingHint: $('numbering-hint'),
   };
 
-  function currentBuilding() { return BUILDINGS.find(b => b.id === state.currentBuildingId); }
-  function currentFloor() {
-    const b = currentBuilding();
-    return b.floors.find(f => f.level === state.currentLevel) || b.floors[0];
-  }
+  const clear = node => { while (node.firstChild) node.removeChild(node.firstChild); };
+  const building = () => BUILDINGS.find(b => b.id === state.buildingId);
+  const floorOf = () => {
+    const b = building();
+    return b.floors.find(f => f.level === state.level) || b.floors[0];
+  };
+  const floorTabLabel = lvl => (lvl === 0 ? 'Цоколь' : `${lvl} эт.`);
+  const meters = m => `${Math.round(m)} м`;
+  const minutes = m => Math.max(1, Math.round(m / 70)); // ~70 м/мин пешком
 
   // -------------------------------------------------------------
   // Навигация
   // -------------------------------------------------------------
-  function selectBuilding(id, level) {
+  function goToBuilding(id, level) {
     const b = BUILDINGS.find(x => x.id === id);
     if (!b) return;
-    state.currentBuildingId = id;
-    state.currentLevel = level || b.floors[0].level;
-    state.showCampusOverview = false;
-    renderFloorTabs();
-    renderBreadcrumb();
-    renderMap();
+    state.buildingId = id;
+    state.level = (level !== undefined && b.floors.some(f => f.level === level))
+      ? level
+      : (b.floors.find(f => f.level === 1) || b.floors[0]).level;
+    state.campusView = false;
+    renderAll();
+  }
+
+  function goToLevel(level) {
+    state.level = level;
+    state.campusView = false;
+    renderAll();
+  }
+
+  function showCampus() {
+    state.campusView = true;
+    state.highlightRoomId = null;
+    el.roomDetail.classList.add('hidden');
+    renderAll();
+  }
+
+  function renderAll() {
     renderBuildingList();
-  }
-
-  function selectLevel(level) {
-    state.currentLevel = level;
     renderFloorTabs();
-    renderBreadcrumb();
-    renderMap();
-  }
-
-  function toggleCampusOverview() {
-    state.showCampusOverview = true;
-    renderBreadcrumb();
+    renderHeaderInfo();
     renderMap();
   }
 
   // -------------------------------------------------------------
-  // Рендер бокового списка корпусов
+  // Боковая панель
   // -------------------------------------------------------------
   function renderBuildingList() {
     clear(el.buildingList);
     BUILDINGS.forEach(b => {
       const card = document.createElement('button');
       card.type = 'button';
-      card.className = 'building-card' + (!state.showCampusOverview && state.currentBuildingId === b.id ? ' active' : '');
+      card.className = 'building-card' + (!state.campusView && state.buildingId === b.id ? ' active' : '');
       card.innerHTML = `
-        <div class="building-card-code">${b.code}</div>
-        <div>
-          <div class="building-card-name">${b.name}</div>
-          <div class="building-card-addr">${b.address}</div>
-        </div>`;
-      card.addEventListener('click', () => selectBuilding(b.id));
+        <span class="building-card-code">${b.code}</span>
+        <span class="building-card-body">
+          <span class="building-card-name">${b.name}</span>
+          <span class="building-card-addr">${b.floors.length} эт. · ${b.about}</span>
+        </span>`;
+      card.addEventListener('click', () => goToBuilding(b.id));
       el.buildingList.appendChild(card);
     });
   }
 
   function renderFloorTabs() {
-    const b = currentBuilding();
     clear(el.floorTabs);
-    b.floors.forEach(f => {
+    if (state.campusView) { el.floorTabs.style.display = 'none'; return; }
+    el.floorTabs.style.display = 'flex';
+    building().floors.forEach(f => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'floor-tab' + (f.level === state.currentLevel && !state.showCampusOverview ? ' active' : '');
-      btn.textContent = `${f.level} эт.`;
-      btn.addEventListener('click', () => selectLevel(f.level));
+      btn.className = 'floor-tab' + (f.level === state.level ? ' active' : '');
+      btn.textContent = floorTabLabel(f.level);
+      btn.title = f.label;
+      btn.addEventListener('click', () => goToLevel(f.level));
       el.floorTabs.appendChild(btn);
     });
-    el.floorTabs.style.display = state.showCampusOverview ? 'none' : 'flex';
   }
 
-  function renderBreadcrumb() {
-    if (state.showCampusOverview) {
-      el.breadcrumb.textContent = 'Обзор кампуса — все корпуса МГИМО';
-    } else {
-      const b = currentBuilding(), f = currentFloor();
-      el.breadcrumb.textContent = `${b.name} · ${f.name}`;
+  function renderHeaderInfo() {
+    if (state.campusView) {
+      el.breadcrumb.textContent = 'Территория МГИМО — все корпуса';
+      el.floorNote.textContent = 'Нажмите на корпус, чтобы открыть поэтажный план.';
+      el.numberingHint.textContent = '';
+      return;
     }
+    const b = building(), f = floorOf();
+    el.breadcrumb.textContent = `${b.name} · ${f.label}`;
+    el.floorNote.textContent = f.note || '';
+    el.numberingHint.textContent = b.numbering || '';
   }
 
   // -------------------------------------------------------------
   // Карта
   // -------------------------------------------------------------
-  function getRouteNodeIdsForView() {
+  function routeNodesForView() {
     if (!state.route) return null;
     const path = state.route.path;
-    if (state.showCampusOverview) {
+    if (state.campusView) {
       return path.filter(id => {
         const n = graph.nodes.get(id);
-        return n.type === 'hub' || n.type === 'entrance';
+        return n.type === 'hub' || n.type === 'outdoor';
       });
     }
     return path.filter(id => {
       const n = graph.nodes.get(id);
-      return n.type !== 'hub' && n.buildingId === state.currentBuildingId && n.level === state.currentLevel;
+      return n.type !== 'hub' && n.type !== 'outdoor'
+        && n.buildingId === state.buildingId && n.level === state.level;
     });
   }
 
   function renderMap() {
-    const routeIds = getRouteNodeIdsForView();
-    const isStart = !!(routeIds && routeIds.length && state.route && routeIds[0] === state.route.path[0]);
-    const isEnd = !!(routeIds && routeIds.length && state.route && routeIds[routeIds.length - 1] === state.route.path[state.route.path.length - 1]);
+    const ids = routeNodesForView();
+    const p = state.route ? state.route.path : null;
+    const isStart = !!(ids && ids.length && p && ids[0] === p[0]);
+    const isEnd = !!(ids && ids.length && p && ids[ids.length - 1] === p[p.length - 1]);
 
-    if (state.showCampusOverview) {
+    if (state.campusView) {
       svg.setAttribute('viewBox', computeCampusViewBox(CAMPUS_LAYOUT).join(' '));
       renderCampusOverview(viewport, graph, BUILDINGS, CAMPUS_LAYOUT, {
-        highlightBuildingId: state.currentBuildingId,
-        routeNodeIds: routeIds,
-        isRouteStart: isStart,
-        isRouteEnd: isEnd,
-        onSelectBuilding: (id) => selectBuilding(id),
+        highlightBuildingId: state.buildingId,
+        routeNodeIds: ids, isRouteStart: isStart, isRouteEnd: isEnd,
+        onSelectBuilding: goToBuilding,
       });
     } else {
-      const b = currentBuilding(), f = currentFloor();
-      svg.setAttribute('viewBox', computeFloorViewBox(f).join(' '));
-      renderFloorPlan(viewport, graph, b, f, {
+      const layout = layoutFloor(building(), floorOf());
+      svg.setAttribute('viewBox', computeFloorViewBox(layout).join(' '));
+      renderFloorPlan(viewport, graph, layout, {
         highlightRoomId: state.highlightRoomId,
         categoryFilter: state.categoryFilter,
-        routeNodeIds: routeIds,
-        isRouteStart: isStart,
-        isRouteEnd: isEnd,
-        onRoomClick: (roomId) => showRoomDetail(roomId),
+        routeNodeIds: ids, isRouteStart: isStart, isRouteEnd: isEnd,
+        onRoomClick: showRoomDetail,
       });
     }
     panzoom.reset();
   }
 
   function showRoomDetail(roomId) {
-    const idx = searchIndex.find(x => x.id === roomId);
+    const item = searchIndex.find(x => x.id === roomId);
+    if (!item) return;
     state.highlightRoomId = roomId;
     renderMap();
-    if (!idx) { el.roomDetail.classList.add('hidden'); return; }
+
+    const color = (CATEGORIES[item.categoryKey] || {}).color || '#333';
     el.roomDetail.classList.remove('hidden');
-    const catColor = idx.categoryKey ? CATEGORIES[idx.categoryKey].color : '#333';
     el.roomDetail.innerHTML = `
       <button class="room-detail-close" aria-label="Закрыть">×</button>
-      <div class="room-detail-cat" style="color:${catColor}">${idx.categoryLabel}</div>
-      <div class="room-detail-title">${idx.name}</div>
-      <div class="room-detail-meta">${idx.buildingName} · ${idx.level} этаж${idx.capacity ? ` · вместимость ${idx.capacity}` : ''}</div>
+      <div class="room-detail-cat" style="color:${color}">${item.categoryLabel}</div>
+      <div class="room-detail-title">${item.number ? item.number + ' — ' : ''}${item.name}</div>
+      <div class="room-detail-meta">${item.buildingName} · ${item.floorLabel}</div>
       <div class="room-detail-actions">
-        <button class="btn-small" id="set-from-btn">Отсюда маршрут</button>
-        <button class="btn-small btn-primary" id="set-to-btn">Сюда маршрут</button>
+        <button class="btn-small" data-act="from">Отсюда</button>
+        <button class="btn-small btn-primary" data-act="to">Сюда маршрут</button>
       </div>`;
     el.roomDetail.querySelector('.room-detail-close').addEventListener('click', () => {
       el.roomDetail.classList.add('hidden');
       state.highlightRoomId = null;
       renderMap();
     });
-    el.roomDetail.querySelector('#set-from-btn').addEventListener('click', () => {
-      pickRouteItem('from', idx);
-      switchMode('route');
-    });
-    el.roomDetail.querySelector('#set-to-btn').addEventListener('click', () => {
-      pickRouteItem('to', idx);
-      switchMode('route');
+    el.roomDetail.querySelectorAll('[data-act]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        pickPoint(btn.dataset.act, item);
+        switchMode('route');
+      });
     });
   }
 
-  function navigateToIndexItem(item) {
-    selectBuilding(item.buildingId, item.level);
-    if (item.kind === 'room') showRoomDetail(item.id);
-  }
-
   // -------------------------------------------------------------
-  // Поиск (универсальный виджет)
+  // Поиск
   // -------------------------------------------------------------
-  function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
-
-  function renderDropdown(dropdownEl, results, onPick) {
-    clear(dropdownEl);
+  function renderDropdown(box, results, onPick) {
+    clear(box);
     if (!results.length) {
-      dropdownEl.innerHTML = '<div class="search-empty">Ничего не найдено</div>';
-      dropdownEl.classList.add('open');
+      box.innerHTML = '<div class="search-empty">Ничего не найдено</div>';
+      box.classList.add('open');
       return;
     }
     results.forEach(item => {
@@ -225,188 +219,255 @@
       row.type = 'button';
       row.className = 'search-result-item';
       row.innerHTML = `
-        <span class="search-result-num">${item.number || '—'}</span>
+        <span class="search-result-num">${item.number || '·'}</span>
         <span class="search-result-body">
           <span class="search-result-name">${item.name}</span>
-          <span class="search-result-meta">${item.categoryLabel} · ${item.buildingName}, ${item.level} эт.</span>
+          <span class="search-result-meta">${item.categoryLabel} · ${item.buildingName}, ${item.floorLabel}</span>
         </span>`;
       row.addEventListener('click', () => onPick(item));
-      dropdownEl.appendChild(row);
+      box.appendChild(row);
     });
-    dropdownEl.classList.add('open');
+    box.classList.add('open');
   }
 
-  function attachSearchField(inputEl, dropdownEl, onPick, opts = {}) {
+  function attachSearch(input, box, onPick, useFilter) {
     let timer = null;
-    inputEl.addEventListener('input', () => {
+    input.addEventListener('input', () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        const q = inputEl.value;
-        if (!q.trim()) { dropdownEl.classList.remove('open'); clear(dropdownEl); return; }
-        const results = searchRooms(searchIndex, q, { categoryFilter: opts.categoryFilter ? opts.categoryFilter() : null });
-        renderDropdown(dropdownEl, results, (item) => {
-          inputEl.value = `${item.number ? item.number + ' — ' : ''}${item.name}`;
-          dropdownEl.classList.remove('open');
+        const q = input.value;
+        if (!q.trim()) { box.classList.remove('open'); clear(box); return; }
+        const results = searchRooms(searchIndex, q, {
+          categoryFilter: useFilter ? state.categoryFilter : null,
+        });
+        renderDropdown(box, results, item => {
+          input.value = `${item.number ? item.number + ' — ' : ''}${item.name}`;
+          box.classList.remove('open');
           onPick(item);
         });
-      }, 120);
+      }, 110);
     });
-    inputEl.addEventListener('focus', () => { if (dropdownEl.childElementCount) dropdownEl.classList.add('open'); });
-    document.addEventListener('click', (e) => {
-      if (e.target !== inputEl && !dropdownEl.contains(e.target)) dropdownEl.classList.remove('open');
+    input.addEventListener('focus', () => { if (box.childElementCount) box.classList.add('open'); });
+    document.addEventListener('click', e => {
+      if (e.target !== input && !box.contains(e.target)) box.classList.remove('open');
     });
   }
 
-  attachSearchField(el.globalSearch, el.globalSearchResults, navigateToIndexItem, { categoryFilter: () => state.categoryFilter });
-  attachSearchField(el.routeFrom, el.routeFromResults, (item) => pickRouteItem('from', item));
-  attachSearchField(el.routeTo, el.routeToResults, (item) => pickRouteItem('to', item));
+  attachSearch(el.globalSearch, el.globalSearchResults, item => {
+    goToBuilding(item.buildingId, item.level);
+    showRoomDetail(item.id);
+  }, true);
+  attachSearch(el.routeFrom, el.routeFromResults, item => pickPoint('from', item), false);
+  attachSearch(el.routeTo, el.routeToResults, item => pickPoint('to', item), false);
 
-  function pickRouteItem(which, item) {
-    if (which === 'from') {
-      state.routeFromItem = item;
-      el.routeFrom.value = `${item.number ? item.number + ' — ' : ''}${item.name}`;
-    } else {
-      state.routeToItem = item;
-      el.routeTo.value = `${item.number ? item.number + ' — ' : ''}${item.name}`;
-    }
+  function pickPoint(which, item) {
+    const label = `${item.number ? item.number + ' — ' : ''}${item.name}`;
+    if (which === 'from') { state.from = item; el.routeFrom.value = label; }
+    else { state.to = item; el.routeTo.value = label; }
   }
 
   el.swapBtn.addEventListener('click', () => {
-    const f = state.routeFromItem, t = state.routeToItem;
-    state.routeFromItem = t; state.routeToItem = f;
+    const f = state.from, t = state.to;
+    state.from = t; state.to = f;
     el.routeFrom.value = t ? `${t.number ? t.number + ' — ' : ''}${t.name}` : '';
     el.routeTo.value = f ? `${f.number ? f.number + ' — ' : ''}${f.name}` : '';
   });
 
   // -------------------------------------------------------------
-  // Маршрутизация
+  // Маршрут
   // -------------------------------------------------------------
-  function metersLabel(m) { return `${Math.round(m)} м`; }
-
-  function segmentDistance(nodeIds) {
+  function segmentDistance(ids) {
     let total = 0;
-    for (let i = 1; i < nodeIds.length; i++) {
-      const edges = graph.adj.get(nodeIds[i - 1]) || [];
-      const e = edges.find(x => x.to === nodeIds[i]);
+    for (let i = 1; i < ids.length; i++) {
+      const e = edgeBetween(graph, ids[i - 1], ids[i]);
       if (e) total += e.weight;
     }
     return total;
   }
 
-  function nodeShortLabel(id) {
+  function endpointLabel(id) {
     const n = graph.nodes.get(id);
-    if (n.type === 'room') return n.room.name;
-    if (n.type === 'entrance') return `входа в ${n.buildingName}`;
-    if (n.type === 'stair') return 'лестницы';
-    if (n.type === 'elevator') return 'лифта';
+    if (n.type === 'room') {
+      const r = n.room;
+      if (r.category === 'stairs') return 'лестницы';
+      if (r.category === 'elevator') return 'лифта';
+      if (r.category === 'passage') return 'перехода';
+      if (r.category === 'entrance') return 'выхода';
+      return r.number ? `${r.name} (${r.number})` : r.name;
+    }
+    if (n.type === 'outdoor') return n.buildingName;
     return 'коридора';
   }
 
-  function describeSegments(segments) {
-    const steps = [];
-    segments.forEach((seg, i) => {
-      const dist = segmentDistance(seg.nodeIds);
-      if (seg.type === 'campus') {
-        const fromN = graph.nodes.get(seg.nodeIds[0]);
-        const toN = graph.nodes.get(seg.nodeIds[seg.nodeIds.length - 1]);
-        const fromLabel = fromN.type === 'entrance' ? fromN.buildingName : 'территории кампуса';
-        const toLabel = toN.type === 'entrance' ? toN.buildingName : 'территории кампуса';
-        steps.push({ segIndex: i, text: `Пройти по территории кампуса: от «${fromLabel}» до «${toLabel}» (~${metersLabel(dist)})` });
-      } else {
-        const b = BUILDINGS.find(x => x.id === seg.buildingId);
-        const floor = b.floors.find(x => x.level === seg.level);
-        const startId = seg.nodeIds[0], endId = seg.nodeIds[seg.nodeIds.length - 1];
-        const startType = graph.nodes.get(startId).type;
-        const prevSeg = segments[i - 1];
-        let intro = `${b.name}, ${floor.name}`;
-        if (prevSeg && prevSeg.type === 'floor' && prevSeg.buildingId === seg.buildingId) {
-          const viaType = startType === 'elevator' ? 'на лифте' : 'по лестнице';
-          const dir = seg.level > prevSeg.level ? 'подняться' : 'спуститься';
-          intro = `${dir.charAt(0).toUpperCase() + dir.slice(1)} ${viaType} на ${seg.level} этаж (${b.name})`;
+  const leadEdge = (segments, i) => {
+    const prev = segments[i - 1];
+    return prev ? edgeBetween(graph, prev.nodeIds[prev.nodeIds.length - 1], segments[i].nodeIds[0]) : null;
+  };
+
+  /**
+   * Проезд лифтом/подъём по лестнице через несколько этажей — это один
+   * шаг, а не отдельный шаг на каждый промежуточный этаж.
+   */
+  function mergeVerticalRuns(segments) {
+    const groups = [];
+    for (let i = 0; i < segments.length; i++) {
+      const lead = leadEdge(segments, i);
+      let last = i;
+      if (lead && (lead.kind === 'stairs' || lead.kind === 'elevator')) {
+        while (last + 1 < segments.length) {
+          const nextLead = leadEdge(segments, last + 1);
+          if (!nextLead || nextLead.kind !== lead.kind) break;
+          if (segmentDistance(segments[last].nodeIds) > 4) break;
+          last++;
         }
-        const endLabel = nodeShortLabel(endId);
-        steps.push({ segIndex: i, text: `${intro} — далее до ${endLabel} (~${metersLabel(dist)})` });
       }
+      groups.push({ first: i, last, lead });
+      i = last;
+    }
+    return groups;
+  }
+
+  function buildSteps(segments) {
+    return mergeVerticalRuns(segments).map(({ first, last, lead }) => {
+      const i = last;
+      const seg = segments[i];
+      let dist = 0;
+      for (let k = first; k <= last; k++) dist += segmentDistance(segments[k].nodeIds);
+      const prev = segments[first - 1];
+
+      if (seg.type === 'campus') {
+        const fromN = graph.nodes.get(seg.nodeIds[0]).buildingName || 'территории';
+        const toN = graph.nodes.get(seg.nodeIds[seg.nodeIds.length - 1]).buildingName || 'территории';
+        return {
+          seg: i,
+          text: fromN === toN
+            ? `Выйти на территорию у корпуса «${fromN}»`
+            : `Пройти по территории: от «${fromN}» до «${toN}» (~${meters(dist)})`,
+        };
+      }
+
+      const b = BUILDINGS.find(x => x.id === seg.buildingId);
+      const f = b.floors.find(x => x.level === seg.level);
+      let action;
+
+      if (!prev) {
+        action = `Старт: ${b.name}, ${f.label}`;
+      } else if (lead && lead.kind === 'stairs') {
+        action = `${seg.level > prev.level ? 'Подняться' : 'Спуститься'} по лестнице на «${f.label}»`;
+      } else if (lead && lead.kind === 'elevator') {
+        action = `${seg.level > prev.level ? 'Подняться' : 'Спуститься'} на лифте на «${f.label}»`;
+      } else if (lead && lead.kind === 'passage') {
+        action = `Перейти по переходу в «${b.name}»`;
+      } else if (lead && lead.kind === 'door') {
+        action = `Войти в «${b.name}»`;
+      } else {
+        action = `${b.name}, ${f.label}`;
+      }
+
+      return {
+        seg: i,
+        text: `${action} — далее до ${endpointLabel(seg.nodeIds[seg.nodeIds.length - 1])} (~${meters(dist)})`,
+      };
     });
-    return steps;
   }
 
   function jumpToSegment(i) {
+    const seg = state.route.segments[i];
     state.highlightRoomId = null;
     el.roomDetail.classList.add('hidden');
-    const seg = state.route.segments[i];
-    if (seg.type === 'campus') {
-      toggleCampusOverview();
-    } else {
-      selectBuilding(seg.buildingId, seg.level);
-    }
+    if (seg.type === 'campus') showCampus();
+    else goToBuilding(seg.buildingId, seg.level);
+    [...el.routeSteps.children].forEach((c, idx) => c.classList.toggle('active', idx === i));
   }
 
   function buildRoute() {
-    if (!state.routeFromItem || !state.routeToItem) {
-      el.routeSummary.innerHTML = '<div class="route-warning">Выберите точку «Откуда» и «Куда» из подсказок поиска.</div>';
-      return;
-    }
-    const result = dijkstra(graph, state.routeFromItem.id, state.routeToItem.id);
-    if (!result) {
-      el.routeSummary.innerHTML = '<div class="route-warning">Маршрут не найден.</div>';
-      return;
-    }
-    const segments = splitRouteIntoSegments(graph, result.path);
-    state.route = { path: result.path, distance: result.distance, segments, fromItem: state.routeFromItem, toItem: state.routeToItem };
+    const warn = msg => {
+      el.routeSummary.innerHTML = `<div class="route-warning">${msg}</div>`;
+      clear(el.routeSteps);
+    };
+    if (!state.from || !state.to) return warn('Выберите обе точки из подсказок поиска.');
+    if (state.from.id === state.to.id) return warn('Точки совпадают.');
 
+    const res = dijkstra(graph, state.from.id, state.to.id);
+    if (!res) return warn('Маршрут не найден.');
+
+    const segments = splitRouteIntoSegments(graph, res.path);
+    state.route = { path: res.path, distance: res.distance, segments };
+
+    // Считаем только этажи, по которым действительно идёшь, без
+    // транзитных остановок лифта.
+    const floors = new Set(segments
+      .filter(s => s.type === 'floor' && segmentDistance(s.nodeIds) > 4)
+      .map(s => `${s.buildingId}:${s.level}`));
     el.routeSummary.innerHTML = `
       <div class="route-summary-card">
-        <div class="route-summary-dist">≈ ${metersLabel(result.distance)}</div>
-        <div class="route-summary-sub">пешком, ${segments.filter(s => s.type === 'floor').length} этаж(ей) маршрута</div>
+        <div class="route-summary-dist">≈ ${meters(res.distance)}</div>
+        <div class="route-summary-sub">около ${minutes(res.distance)} мин пешком · ${floors.size} этаж(ей) на пути</div>
       </div>`;
+    el.clearRouteBtn.classList.remove('hidden');
 
-    const steps = describeSegments(segments);
     clear(el.routeSteps);
-    steps.forEach((s, idx) => {
+    buildSteps(segments).forEach((s, idx) => {
       const item = document.createElement('button');
       item.type = 'button';
       item.className = 'route-step';
-      item.innerHTML = `<span class="route-step-num">${idx + 1}</span><span>${s.text}</span>`;
-      item.addEventListener('click', () => jumpToSegment(s.segIndex));
+      item.innerHTML = `<span class="route-step-num">${idx + 1}</span><span class="route-step-text">${s.text}</span>`;
+      item.addEventListener('click', () => jumpToSegment(s.seg));
       el.routeSteps.appendChild(item);
     });
 
     jumpToSegment(0);
   }
 
+  function clearRoute() {
+    state.route = null;
+    clear(el.routeSteps);
+    el.routeSummary.innerHTML = '';
+    el.clearRouteBtn.classList.add('hidden');
+    renderMap();
+  }
+
   el.buildRouteBtn.addEventListener('click', buildRoute);
+  el.clearRouteBtn.addEventListener('click', clearRoute);
 
   // -------------------------------------------------------------
-  // Режимы (Карта / Маршрут), легенда, зум
+  // Режимы, легенда, зум
   // -------------------------------------------------------------
   function switchMode(mode) {
     state.mode = mode;
-    [...el.modeTabs.children].forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
+    [...el.modeTabs.children].forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
     el.panelExplore.classList.toggle('hidden', mode !== 'explore');
     el.panelRoute.classList.toggle('hidden', mode !== 'route');
   }
-  [...el.modeTabs.children].forEach(btn => btn.addEventListener('click', () => switchMode(btn.dataset.mode)));
+  [...el.modeTabs.children].forEach(b => b.addEventListener('click', () => switchMode(b.dataset.mode)));
 
   function refreshLegend() {
-    renderLegend(el.legend, CATEGORIES, state.categoryFilter, (label) => {
-      state.categoryFilter = label;
+    renderLegend(el.legend, CATEGORIES, state.categoryFilter, key => {
+      state.categoryFilter = key;
       refreshLegend();
       renderMap();
     });
   }
-  refreshLegend();
 
   el.zoomIn.addEventListener('click', () => panzoom.zoomBy(1.25));
   el.zoomOut.addEventListener('click', () => panzoom.zoomBy(1 / 1.25));
   el.zoomReset.addEventListener('click', () => panzoom.reset());
-  el.showCampusBtn.addEventListener('click', toggleCampusOverview);
+  el.showCampusBtn.addEventListener('click', showCampus);
 
-  // -------------------------------------------------------------
-  // Инициализация
-  // -------------------------------------------------------------
-  renderBuildingList();
-  renderFloorTabs();
-  renderBreadcrumb();
-  renderMap();
+  // Ссылка вида ?room=4016 открывает нужную аудиторию
+  const wanted = new URLSearchParams(location.search).get('room');
+  let deepLink = null;
+  if (wanted) {
+    const hit = searchRooms(searchIndex, wanted, { limit: 1 })[0];
+    if (hit) {
+      state.buildingId = hit.buildingId;
+      state.level = hit.level;
+      state.campusView = false;
+      deepLink = hit.id;
+    }
+  }
+
+  refreshLegend();
+  renderAll();
+  if (deepLink) showRoomDetail(deepLink);
 })();

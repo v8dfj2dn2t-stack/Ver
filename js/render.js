@@ -1,6 +1,6 @@
 /* ===================================================================
- * render.js — отрисовка SVG-схем: обзорная карта кампуса и планы
- * этажей корпусов, включая наложение построенного маршрута.
+ * render.js — отрисовка планов этажей (контур здания, стены, коридоры,
+ * помещения, двери, лестницы) и обзорной схемы территории.
  * =================================================================== */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -14,28 +14,234 @@ function se(tag, attrs = {}, children = []) {
   children.forEach(c => node.appendChild(c));
   return node;
 }
-
 function clearNode(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+function txt(node, s) { node.textContent = s; return node; }
 
-function truncate(str, n) { return str.length > n ? str.slice(0, n - 1) + '…' : str; }
+function fitText(str, widthPx, fontPx) {
+  const max = Math.max(3, Math.floor(widthPx / (fontPx * 0.58)));
+  return str.length > max ? str.slice(0, max - 1) + '…' : str;
+}
+
+/** Разбивает название на 1–2 строки по ширине. */
+function wrapLabel(str, widthPx, fontPx, maxLines = 2) {
+  const perLine = Math.max(4, Math.floor(widthPx / (fontPx * 0.58)));
+  if (str.length <= perLine) return [str];
+  const words = str.split(' ');
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    if (!cur) { cur = w; continue; }
+    if ((cur + ' ' + w).length <= perLine) cur += ' ' + w;
+    else { lines.push(cur); cur = w; if (lines.length === maxLines - 1) break; }
+  }
+  if (cur && lines.length < maxLines) lines.push(cur);
+  if (lines.length === maxLines) {
+    const used = lines.join(' ').length;
+    if (used < str.length) lines[maxLines - 1] = fitText(lines[maxLines - 1] + '…', widthPx, fontPx);
+  }
+  return lines;
+}
 
 // ---------------------------------------------------------------------
-// Легенда категорий
+// Легенда
 // ---------------------------------------------------------------------
+const LEGEND_HIDDEN = new Set(['stairs', 'elevator', 'entrance', 'passage', 'lobby', 'service', 'restroom']);
+
 function renderLegend(container, categories, activeFilter, onToggle) {
   clearNode(container);
   Object.entries(categories).forEach(([key, cat]) => {
+    if (LEGEND_HIDDEN.has(key)) return;
     const item = document.createElement('button');
     item.type = 'button';
-    item.className = 'legend-item' + (activeFilter === cat.label ? ' active' : '');
+    item.className = 'legend-item' + (activeFilter === key ? ' active' : '');
     item.innerHTML = `<span class="legend-swatch" style="background:${cat.color}"></span>${cat.label}`;
-    item.addEventListener('click', () => onToggle(activeFilter === cat.label ? null : cat.label));
+    item.addEventListener('click', () => onToggle(activeFilter === key ? null : key));
     container.appendChild(item);
   });
 }
 
 // ---------------------------------------------------------------------
-// Обзорная карта кампуса
+// Символы на плане
+// ---------------------------------------------------------------------
+function stairsIcon(rect) {
+  const g = se('g', { class: 'sym sym--stairs' });
+  const n = 5;
+  const vertical = rect.h > rect.w;
+  for (let i = 1; i < n; i++) {
+    const t = i / n;
+    if (vertical) {
+      g.appendChild(se('line', { x1: rect.x + 6, y1: rect.y + rect.h * t, x2: rect.x + rect.w - 6, y2: rect.y + rect.h * t }));
+    } else {
+      g.appendChild(se('line', { x1: rect.x + rect.w * t, y1: rect.y + 6, x2: rect.x + rect.w * t, y2: rect.y + rect.h - 6 }));
+    }
+  }
+  return g;
+}
+
+function elevatorIcon(rect) {
+  const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+  const g = se('g', { class: 'sym sym--elevator' });
+  g.appendChild(se('rect', { x: cx - 15, y: cy - 16, width: 30, height: 32, rx: 3 }));
+  g.appendChild(se('path', { d: `M ${cx - 6} ${cy - 3} l 5 -8 l 5 8 z` }));
+  g.appendChild(se('path', { d: `M ${cx - 4} ${cy + 3} l 5 8 l 5 -8 z` }));
+  return g;
+}
+
+function entranceIcon(rect, room) {
+  const g = se('g', { class: 'sym sym--entrance' });
+  const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+  // стрелка внутрь здания (от наружной стены к двери)
+  const dx = room.door.x - cx, dy = room.door.y - cy;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;
+  const sx = cx - ux * 26, sy = cy - uy * 26;
+  const ex = cx + ux * 20, ey = cy + uy * 20;
+  g.appendChild(se('line', { x1: sx, y1: sy, x2: ex, y2: ey, 'marker-end': 'url(#arrow-in)' }));
+  return g;
+}
+
+function passageIcon(rect) {
+  const g = se('g', { class: 'sym sym--passage' });
+  const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
+  g.appendChild(se('line', { x1: cx - 20, y1: cy, x2: cx + 20, y2: cy, 'marker-end': 'url(#arrow-in)' }));
+  return g;
+}
+
+// ---------------------------------------------------------------------
+// План этажа
+// ---------------------------------------------------------------------
+function computeFloorViewBox(layout) {
+  const pad = 70;
+  const b = layout.bbox;
+  return [b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2];
+}
+
+function renderFloorPlan(viewport, graph, layout, opts = {}) {
+  clearNode(viewport);
+  const { WALL, CORRIDOR } = GEOM;
+  const {
+    highlightRoomId = null, categoryFilter = null,
+    routeNodeIds = null, isRouteStart = false, isRouteEnd = false,
+    onRoomClick = () => {},
+  } = opts;
+
+  // 1. Стены: контуры блоков, расширенные наружу
+  const gWalls = se('g', { class: 'walls' });
+  layout.shells.forEach(s => {
+    gWalls.appendChild(se('rect', {
+      x: s.x - WALL, y: s.y - WALL, width: s.w + WALL * 2, height: s.h + WALL * 2, rx: 2,
+      class: 'wall-fill',
+    }));
+  });
+  viewport.appendChild(gWalls);
+
+  // 2. Внутреннее пространство (перекрывает стены на стыках блоков — там проёмы)
+  const gFloor = se('g', { class: 'floor-fill' });
+  layout.shells.forEach(s => {
+    gFloor.appendChild(se('rect', { x: s.x, y: s.y, width: s.w, height: s.h, class: 'floor-rect' }));
+  });
+  viewport.appendChild(gFloor);
+
+  // 3. Коридоры
+  const gCorr = se('g', { class: 'corridors' });
+  layout.corridors.forEach(c => {
+    gCorr.appendChild(se('rect', {
+      x: c.rect.x, y: c.rect.y, width: c.rect.w, height: c.rect.h, class: 'corridor-rect',
+    }));
+  });
+  viewport.appendChild(gCorr);
+
+  // 4. Помещения
+  const gRooms = se('g', { class: 'rooms' });
+  layout.rooms.forEach(r => {
+    const cat = CATEGORIES[r.category] || CATEGORIES.audience;
+    const dimmed = categoryFilter && r.category !== categoryFilter;
+    const highlighted = r.id === highlightRoomId;
+    const isSym = ['stairs', 'elevator', 'entrance', 'passage'].includes(r.category);
+
+    const g = se('g', {
+      class: 'room'
+        + (highlighted ? ' room--highlight' : '')
+        + (dimmed ? ' room--dim' : '')
+        + (isSym ? ' room--sym' : ''),
+      'data-room': r.id,
+    });
+
+    g.appendChild(se('rect', {
+      x: r.rect.x, y: r.rect.y, width: r.rect.w, height: r.rect.h,
+      class: 'room-rect', fill: cat.color, stroke: cat.color,
+    }));
+
+    // Дверь — светлый проём в стене, выходящей на коридор
+    const dw = 22;
+    const horizontalDoor = Math.abs(r.door.y - r.rect.y) < 1 || Math.abs(r.door.y - (r.rect.y + r.rect.h)) < 1;
+    g.appendChild(se('rect', horizontalDoor
+      ? { x: r.door.x - dw / 2, y: r.door.y - 3, width: dw, height: 6, class: 'door' }
+      : { x: r.door.x - 3, y: r.door.y - dw / 2, width: 6, height: dw, class: 'door' }));
+
+    // Символы
+    if (r.category === 'stairs') g.appendChild(stairsIcon(r.rect));
+    else if (r.category === 'elevator') g.appendChild(elevatorIcon(r.rect));
+    else if (r.category === 'entrance') g.appendChild(entranceIcon(r.rect, r));
+    else if (r.category === 'passage') g.appendChild(passageIcon(r.rect));
+
+    // Подписи
+    const cx = r.rect.x + r.rect.w / 2;
+    const big = r.rect.w >= 170 || r.rect.h >= 170;
+    let y = r.rect.y + r.rect.h / 2;
+
+    if (r.number && !isSym) {
+      const fs = big ? 17 : 13;
+      y = r.rect.y + r.rect.h / 2 - (big ? 12 : 9);
+      g.appendChild(txt(se('text', { x: cx, y, class: 'room-number', 'font-size': fs }), r.number));
+      y += big ? 20 : 14;
+    } else {
+      y = r.rect.y + r.rect.h / 2 - (isSym ? -26 : 4);
+    }
+
+    const nameFs = big ? 11 : 9;
+    const label = r.number && !isSym ? r.name.replace(new RegExp(`\\s*${r.number}$`), '') : r.name;
+    wrapLabel(label, r.rect.w - 10, nameFs, isSym ? 1 : 2).forEach((line, i) => {
+      g.appendChild(txt(se('text', {
+        x: cx, y: y + i * (nameFs + 2), class: 'room-name', 'font-size': nameFs,
+      }), line));
+    });
+
+    g.addEventListener('click', () => onRoomClick(r.id));
+    gRooms.appendChild(g);
+  });
+  viewport.appendChild(gRooms);
+
+  // 5. Маршрут
+  if (routeNodeIds && routeNodeIds.length > 1) {
+    const pts = routeNodeIds.map(id => graph.nodes.get(id)).filter(Boolean);
+    const d = pts.map((n, i) => `${i ? 'L' : 'M'} ${n.x} ${n.y}`).join(' ');
+    viewport.appendChild(se('path', { d, class: 'route-shadow' }));
+    viewport.appendChild(se('path', { d, class: 'route-line' }));
+    if (isRouteStart) viewport.appendChild(pin(pts[0].x, pts[0].y, 'start'));
+    if (isRouteEnd) viewport.appendChild(pin(pts[pts.length - 1].x, pts[pts.length - 1].y, 'end'));
+  }
+
+  // 6. Масштабная линейка (10 м)
+  const sb = 10 * PX_PER_M;
+  const bx = layout.bbox.x, by = layout.bbox.y + layout.bbox.h + 38;
+  const gScale = se('g', { class: 'scalebar' });
+  gScale.appendChild(se('line', { x1: bx, y1: by, x2: bx + sb, y2: by }));
+  gScale.appendChild(se('line', { x1: bx, y1: by - 5, x2: bx, y2: by + 5 }));
+  gScale.appendChild(se('line', { x1: bx + sb, y1: by - 5, x2: bx + sb, y2: by + 5 }));
+  gScale.appendChild(txt(se('text', { x: bx + sb / 2, y: by - 10, class: 'scalebar-label' }), '10 м'));
+  viewport.appendChild(gScale);
+}
+
+function pin(x, y, kind) {
+  const g = se('g', { class: `route-pin route-pin--${kind}`, transform: `translate(${x} ${y})` });
+  g.appendChild(se('circle', { r: 13, class: 'route-pin-halo' }));
+  g.appendChild(se('circle', { r: 7, class: 'route-pin-dot' }));
+  return g;
+}
+
+// ---------------------------------------------------------------------
+// Обзорная схема территории
 // ---------------------------------------------------------------------
 function computeCampusViewBox(layout) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -43,7 +249,7 @@ function computeCampusViewBox(layout) {
     minX = Math.min(minX, b.x); minY = Math.min(minY, b.y);
     maxX = Math.max(maxX, b.x + b.w); maxY = Math.max(maxY, b.y + b.h);
   });
-  const pad = 80;
+  const pad = 70;
   return [minX - pad, minY - pad, (maxX - minX) + pad * 2, (maxY - minY) + pad * 2];
 }
 
@@ -51,162 +257,58 @@ function renderCampusOverview(viewport, graph, buildings, layout, opts = {}) {
   clearNode(viewport);
   const { highlightBuildingId = null, routeNodeIds = null, onSelectBuilding = () => {} } = opts;
 
-  // Фоновые дорожки от каждого входа к условному центру территории.
-  const hub = layout.hub;
-  buildings.forEach(b => {
-    const bl = layout.buildings[b.id];
-    const doorX = bl.x + bl.w / 2, doorY = bl.y + bl.h / 2;
-    viewport.appendChild(se('line', {
-      x1: doorX, y1: doorY, x2: hub.x, y2: hub.y,
-      class: 'campus-path',
+  // Связи между корпусами
+  const gLinks = se('g', { class: 'campus-links' });
+  (layout.links || []).forEach(([a, b, w, kind]) => {
+    const A = layout.buildings[a], B = layout.buildings[b];
+    if (!A || !B) return;
+    gLinks.appendChild(se('line', {
+      x1: A.x + A.w / 2, y1: A.y + A.h / 2,
+      x2: B.x + B.w / 2, y2: B.y + B.h / 2,
+      class: kind === 'переход' ? 'campus-link campus-link--indoor' : 'campus-link',
     }));
   });
+  viewport.appendChild(gLinks);
 
-  // Маршрут по территории (если задан)
+  // Маршрут по территории
   if (routeNodeIds && routeNodeIds.length > 1) {
-    const pts = routeNodeIds
-      .map(id => graph.nodes.get(id))
-      .filter(n => n && n.campusX !== undefined)
-      .map(n => `${n.campusX},${n.campusY}`)
-      .join(' ');
-    if (pts) {
-      viewport.appendChild(se('polyline', { points: pts, class: 'route-line route-line--campus' }));
+    const pts = routeNodeIds.map(id => graph.nodes.get(id)).filter(n => n && n.campusX !== undefined);
+    if (pts.length > 1) {
+      const d = pts.map((n, i) => `${i ? 'L' : 'M'} ${n.campusX} ${n.campusY}`).join(' ');
+      viewport.appendChild(se('path', { d, class: 'route-shadow' }));
+      viewport.appendChild(se('path', { d, class: 'route-line route-line--campus' }));
     }
   }
 
+  // Корпуса
   buildings.forEach(b => {
     const bl = layout.buildings[b.id];
+    if (!bl) return;
     const g = se('g', { class: 'campus-building' + (highlightBuildingId === b.id ? ' active' : '') });
     g.style.cursor = 'pointer';
-    g.appendChild(se('rect', {
-      x: bl.x, y: bl.y, width: bl.w, height: bl.h, rx: 10,
-      class: 'campus-building-rect',
-    }));
-    const label = se('text', { x: bl.x + bl.w / 2, y: bl.y + bl.h / 2 - 6, class: 'campus-building-label' });
-    label.textContent = b.name;
-    const sub = se('text', { x: bl.x + bl.w / 2, y: bl.y + bl.h / 2 + 14, class: 'campus-building-sub' });
-    sub.textContent = b.code;
-    g.appendChild(label);
-    g.appendChild(sub);
+    g.appendChild(se('rect', { x: bl.x, y: bl.y, width: bl.w, height: bl.h, rx: 6, class: 'campus-building-rect' }));
+    g.appendChild(txt(se('text', {
+      x: bl.x + bl.w / 2, y: bl.y + bl.h / 2 - 4, class: 'campus-building-label',
+    }), b.name));
+    g.appendChild(txt(se('text', {
+      x: bl.x + bl.w / 2, y: bl.y + bl.h / 2 + 16, class: 'campus-building-sub',
+    }), `${b.floors.length} эт. · ${b.code}`));
     g.addEventListener('click', () => onSelectBuilding(b.id));
     viewport.appendChild(g);
   });
 
-  // Точки старта/финиша маршрута на территории
   if (routeNodeIds && routeNodeIds.length) {
-    const first = graph.nodes.get(routeNodeIds[0]);
-    const last = graph.nodes.get(routeNodeIds[routeNodeIds.length - 1]);
-    if (opts.isRouteStart && first) viewport.appendChild(pin(first.campusX, first.campusY, 'start'));
-    if (opts.isRouteEnd && last) viewport.appendChild(pin(last.campusX, last.campusY, 'end'));
-  }
-}
-
-function pin(x, y, kind) {
-  const g = se('g', { class: `route-pin route-pin--${kind}`, transform: `translate(${x} ${y})` });
-  g.appendChild(se('circle', { r: 11, class: 'route-pin-halo' }));
-  g.appendChild(se('circle', { r: 6, class: 'route-pin-dot' }));
-  return g;
-}
-
-// ---------------------------------------------------------------------
-// План этажа
-// ---------------------------------------------------------------------
-function computeFloorViewBox(floor) {
-  const G = window.MAP_GEOM;
-  const width = G.MARGIN_X * 2 + (floor.units - 1) * G.UNIT + G.ROOM_W;
-  const height = G.CORRIDOR_Y * 2 + G.ROOM_H + 60;
-  return [-40, 0, width + 40, height];
-}
-
-function iconBadge(x, y, text, cls) {
-  const g = se('g', { class: `map-icon ${cls}`, transform: `translate(${x} ${y})` });
-  g.appendChild(se('rect', { x: -22, y: -18, width: 44, height: 36, rx: 6, class: 'map-icon-box' }));
-  const t = se('text', { class: 'map-icon-label', y: 5 });
-  t.textContent = text;
-  g.appendChild(t);
-  return g;
-}
-
-function renderFloorPlan(viewport, graph, building, floor, opts = {}) {
-  clearNode(viewport);
-  const G = window.MAP_GEOM;
-  const {
-    highlightRoomId = null, categoryFilter = null,
-    routeNodeIds = null, isRouteStart = false, isRouteEnd = false,
-    onRoomClick = () => {},
-  } = opts;
-
-  const corridorWidth = G.MARGIN_X + (floor.units - 1) * G.UNIT + G.MARGIN_X;
-  viewport.appendChild(se('rect', {
-    x: G.MARGIN_X - 40, y: G.CORRIDOR_Y, width: corridorWidth - G.MARGIN_X * 2 + 80, height: G.CORRIDOR_H,
-    class: 'corridor',
-  }));
-
-  // Лестницы
-  ['stairA', 'stairB'].forEach(prefix => {
-    const id = `${prefix}-${building.id}-${floor.level}`;
-    const n = graph.nodes.get(id);
-    if (!n) return;
-    viewport.appendChild(iconBadge(n.floorX, n.floorY, 'Лестница', 'map-icon--stair'));
-  });
-
-  // Лифт
-  if (floor.elevator) {
-    const n = graph.nodes.get(`elev-${building.id}-${floor.level}`);
-    if (n) viewport.appendChild(iconBadge(n.floorX, n.floorY, 'Лифт', 'map-icon--elevator'));
-  }
-
-  // Вход
-  if (floor.entrance) {
-    const n = graph.nodes.get(`entrance-${building.id}`);
-    if (n) viewport.appendChild(iconBadge(n.floorX, n.floorY, 'Вход', 'map-icon--entrance'));
-  }
-
-  // Комнаты
-  floor.rooms.forEach(r => {
-    const n = graph.nodes.get(r.id);
-    if (!n) return;
-    const cat = CATEGORIES[r.category];
-    const dimmed = categoryFilter && cat.label !== categoryFilter;
-    const isHighlighted = r.id === highlightRoomId;
-    const g = se('g', {
-      class: 'room' + (isHighlighted ? ' room--highlight' : '') + (dimmed ? ' room--dim' : ''),
-      transform: `translate(${n.floorX - G.ROOM_W / 2} ${n.floorY - G.ROOM_H / 2})`,
-    });
-    g.style.cursor = 'pointer';
-    g.appendChild(se('rect', {
-      width: G.ROOM_W, height: G.ROOM_H, rx: 6,
-      class: 'room-rect', style: `--room-color:${cat.color}`,
-    }));
-    const num = se('text', { x: G.ROOM_W / 2, y: 22, class: 'room-number' });
-    num.textContent = r.number || cat.short;
-    const nm = se('text', { x: G.ROOM_W / 2, y: 38, class: 'room-name' });
-    nm.textContent = truncate(cat.label, 14);
-    g.appendChild(num);
-    g.appendChild(nm);
-    g.addEventListener('click', () => onRoomClick(r.id));
-    viewport.appendChild(g);
-  });
-
-  // Маршрут на этаже
-  if (routeNodeIds && routeNodeIds.length > 1) {
-    const pts = routeNodeIds
-      .map(id => graph.nodes.get(id))
-      .filter(Boolean)
-      .map(n => `${n.floorX},${n.floorY}`)
-      .join(' ');
-    viewport.appendChild(se('polyline', { points: pts, class: 'route-line' }));
-
-    const first = graph.nodes.get(routeNodeIds[0]);
-    const last = graph.nodes.get(routeNodeIds[routeNodeIds.length - 1]);
-    if (isRouteStart && first) viewport.appendChild(pin(first.floorX, first.floorY, 'start'));
-    if (isRouteEnd && last) viewport.appendChild(pin(last.floorX, last.floorY, 'end'));
+    const pts = routeNodeIds.map(id => graph.nodes.get(id)).filter(n => n && n.campusX !== undefined);
+    if (pts.length) {
+      if (opts.isRouteStart) viewport.appendChild(pin(pts[0].campusX, pts[0].campusY, 'start'));
+      if (opts.isRouteEnd) viewport.appendChild(pin(pts[pts.length - 1].campusX, pts[pts.length - 1].campusY, 'end'));
+    }
   }
 }
 
 if (typeof window !== 'undefined') {
   Object.assign(window, {
-    renderLegend, renderCampusOverview, renderFloorPlan,
-    computeCampusViewBox, computeFloorViewBox,
+    renderLegend, renderFloorPlan, renderCampusOverview,
+    computeFloorViewBox, computeCampusViewBox,
   });
 }

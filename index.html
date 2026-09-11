@@ -2,9 +2,9 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>МГИМО · Интерактивная карта кампуса</title>
-<meta name="description" content="Интерактивная карта университета МГИМО: поиск аудиторий и кабинетов по названию, номеру или назначению, построение маршрута между точками кампуса.">
+<meta name="description" content="Интерактивная карта МГИМО: поиск аудиторий и кабинетов по номеру, названию или назначению и построение маршрута между любыми точками кампуса.">
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -19,7 +19,7 @@
   </div>
   <div class="search-wrap">
     <input id="global-search" type="text" autocomplete="off"
-           placeholder="Поиск аудитории: номер, название или назначение — например «305», «библиотека», «деканат»">
+           placeholder="Поиск: номер аудитории, название или назначение — «4016», «деканат», «бассейн»">
     <div id="global-search-results" class="search-dropdown"></div>
   </div>
 </header>
@@ -32,16 +32,20 @@
     </div>
 
     <div id="panel-explore" class="panel">
-      <h2 class="panel-title">Корпуса университета</h2>
+      <h2 class="panel-title">Корпуса</h2>
       <div class="building-list" id="building-list"></div>
 
-      <h2 class="panel-title">Обозначения</h2>
+      <h2 class="panel-title">Назначение помещений</h2>
       <div class="legend" id="legend"></div>
 
-      <p class="disclaimer">
-        Схема носит демонстрационный характер: расположение и номера аудиторий
-        условны и предназначены для показа работы поиска и навигации.
-      </p>
+      <div class="disclaimer">
+        <p><strong>Об источниках.</strong> Структура корпусов и система нумерации взяты
+        из открытых источников: <a href="https://mgimo.ru/territory/map/" target="_blank" rel="noopener">Карта Университета МГИМО</a>
+        и <a href="https://studsouz.mgimo.ru/rubrics/mgimo-guide/infrastructure/" target="_blank" rel="noopener">справочник первокурсника Студсоюза МГИМО</a>.</p>
+        <p>Планировка этажей — реконструкция по этой логике (крылья, центральный вход,
+        коридорная система, нумерация), а не выгрузка поэтажного плана БТИ. Точное
+        положение отдельных аудиторий внутри крыла может отличаться.</p>
+      </div>
     </div>
 
     <div id="panel-route" class="panel hidden">
@@ -49,7 +53,7 @@
 
       <label class="field-label" for="route-from">Откуда</label>
       <div class="route-input-wrap">
-        <input id="route-from" type="text" autocomplete="off" placeholder="Аудитория, кабинет или вход в корпус">
+        <input id="route-from" type="text" autocomplete="off" placeholder="Аудитория, кабинет или вход">
         <div id="route-from-results" class="search-dropdown"></div>
       </div>
 
@@ -57,11 +61,12 @@
 
       <label class="field-label" for="route-to">Куда</label>
       <div class="route-input-wrap">
-        <input id="route-to" type="text" autocomplete="off" placeholder="Аудитория, кабинет или вход в корпус">
+        <input id="route-to" type="text" autocomplete="off" placeholder="Аудитория, кабинет или вход">
         <div id="route-to-results" class="search-dropdown"></div>
       </div>
 
       <button type="button" id="build-route-btn" class="btn-primary btn-block">Проложить маршрут</button>
+      <button type="button" id="clear-route-btn" class="btn-ghost btn-block hidden">Сбросить маршрут</button>
 
       <div id="route-summary"></div>
       <div id="route-steps" class="route-steps"></div>
@@ -70,31 +75,40 @@
 
   <main class="map-area">
     <div class="map-toolbar">
-      <div class="breadcrumb" id="breadcrumb"></div>
+      <div class="toolbar-titles">
+        <div class="breadcrumb" id="breadcrumb"></div>
+        <div class="numbering-hint" id="numbering-hint"></div>
+      </div>
       <div class="floor-tabs" id="floor-tabs"></div>
       <div class="zoom-controls">
-        <button type="button" id="show-campus" class="btn-ghost">Обзор кампуса</button>
+        <button type="button" id="show-campus" class="btn-ghost">Территория</button>
         <button type="button" id="zoom-out" title="Уменьшить">–</button>
         <button type="button" id="zoom-reset" title="Сбросить масштаб">⤾</button>
         <button type="button" id="zoom-in" title="Увеличить">+</button>
       </div>
     </div>
+
     <div class="map-canvas">
       <svg id="map-svg" class="map-svg" preserveAspectRatio="xMidYMid meet">
         <defs>
-          <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M0,0 L10,5 L0,10 z" class="arrow-head"></path>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <path d="M0,1 L9,5 L0,9 z" class="arrow-head"></path>
+          </marker>
+          <marker id="arrow-in" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,1 L9,5 L0,9 z" class="arrow-in-head"></path>
           </marker>
         </defs>
         <g id="map-viewport"></g>
       </svg>
       <div id="room-detail" class="room-detail hidden"></div>
-      <p class="map-hint">Колесо мыши — масштаб, перетаскивание — перемещение по карте</p>
+      <div class="floor-note" id="floor-note"></div>
+      <p class="map-hint">Колесо — масштаб, перетаскивание — сдвиг карты</p>
     </div>
   </main>
 </div>
 
 <script src="js/data.js"></script>
+<script src="js/layout.js"></script>
 <script src="js/graph.js"></script>
 <script src="js/search.js"></script>
 <script src="js/panzoom.js"></script>

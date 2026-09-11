@@ -1,85 +1,69 @@
 /* ===================================================================
- * search.js — индекс поиска по кабинетам/аудиториям (по названию,
- * номеру или назначению) и вспомогательные функции ранжирования.
+ * search.js — индекс и поиск помещений по номеру, названию и назначению.
  * =================================================================== */
 
 function normalize(s) {
-  return (s || '').toString().toLowerCase().replace(/ё/g, 'е').trim();
+  return (s || '').toString().toLowerCase().replace(/ё/g, 'е').replace(/[.\s-]+/g, ' ').trim();
 }
 
-function buildSearchIndex(buildings) {
+function buildSearchIndex(graph, buildings) {
   const index = [];
-
-  buildings.forEach(b => {
-    // Точки входа тоже можно искать/выбирать как точку маршрута.
-    const groundFloor = b.floors.find(f => f.entrance);
-    if (groundFloor) {
+  graph.layouts.forEach(L => {
+    const b = L.building;
+    L.rooms.forEach(r => {
+      const cat = CATEGORIES[r.category] || CATEGORIES.audience;
       index.push({
-        id: `entrance-${b.id}`,
-        kind: 'entrance',
-        number: '',
-        name: `Вход в корпус — ${b.name}`,
-        categoryLabel: 'Вход в здание',
-        categoryKey: null,
+        id: r.id,
+        number: r.number,
+        name: r.name,
+        categoryKey: r.category,
+        categoryLabel: cat.label,
         buildingId: b.id,
         buildingName: b.name,
-        level: groundFloor.level,
-        searchText: normalize(`вход ${b.name} ${b.code} ${b.address}`),
-      });
-    }
-
-    b.floors.forEach(floor => {
-      floor.rooms.forEach(r => {
-        const cat = CATEGORIES[r.category];
-        index.push({
-          id: r.id,
-          kind: 'room',
-          number: r.number,
-          name: r.name,
-          categoryLabel: cat.label,
-          categoryKey: r.category,
-          buildingId: b.id,
-          buildingName: b.name,
-          level: floor.level,
-          capacity: r.capacity,
-          searchText: normalize(`${r.number} ${r.name} ${cat.label} ${cat.short} ${b.name} ${b.code} ${floor.name}`),
-        });
+        buildingCode: b.code,
+        level: r.level,
+        floorLabel: r.floorLabel,
+        searchText: normalize(`${r.number} ${r.name} ${cat.label} ${cat.short} ${b.name} ${b.code} ${r.floorLabel}`),
+        numberNorm: normalize(r.number),
       });
     });
   });
-
   return index;
 }
 
 /**
- * Ранжированный поиск: точное совпадение номера > начало строки > вхождение.
+ * Ранжирование: точный номер > номер с начала > название с начала >
+ * вхождение в любое поле.
  */
 function searchRooms(index, query, opts = {}) {
   const q = normalize(query);
   if (!q) return [];
-  const { categoryFilter = null, buildingFilter = null, limit = 40 } = opts;
+  const { categoryFilter = null, buildingFilter = null, limit = 50 } = opts;
 
-  const results = [];
+  const out = [];
   for (const item of index) {
-    if (categoryFilter && item.categoryLabel !== categoryFilter) continue;
+    if (categoryFilter && item.categoryKey !== categoryFilter) continue;
     if (buildingFilter && item.buildingId !== buildingFilter) continue;
 
-    const numNorm = normalize(item.number);
-    let score = -1;
-    if (numNorm && numNorm === q) score = 100;
-    else if (numNorm && numNorm.startsWith(q)) score = 80;
+    let score = 0;
+    if (item.numberNorm && item.numberNorm === q) score = 100;
+    else if (item.numberNorm && item.numberNorm.startsWith(q)) score = 80;
     else if (normalize(item.name).startsWith(q)) score = 70;
+    else if (normalize(item.categoryLabel).startsWith(q)) score = 55;
     else if (item.searchText.includes(q)) score = 40;
 
-    if (score > 0) results.push({ item, score });
+    if (score > 0) out.push({ item, score });
   }
 
-  results.sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name, 'ru'));
-  return results.slice(0, limit).map(r => r.item);
+  out.sort((a, b) =>
+    b.score - a.score ||
+    a.item.buildingName.localeCompare(b.item.buildingName, 'ru') ||
+    a.item.level - b.item.level ||
+    a.item.name.localeCompare(b.item.name, 'ru'));
+
+  return out.slice(0, limit).map(r => r.item);
 }
 
 if (typeof window !== 'undefined') {
-  window.buildSearchIndex = buildSearchIndex;
-  window.searchRooms = searchRooms;
-  window.normalizeSearch = normalize;
+  Object.assign(window, { buildSearchIndex, searchRooms, normalizeSearch: normalize });
 }
