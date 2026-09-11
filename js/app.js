@@ -51,9 +51,16 @@
   // -------------------------------------------------------------
   // Навигация
   // -------------------------------------------------------------
+  /** Карточка помещения относится к конкретному этажу — при уходе с него скрываем. */
+  function clearRoomDetail() {
+    state.highlightRoomId = null;
+    el.roomDetail.classList.add('hidden');
+  }
+
   function goToBuilding(id, level) {
     const b = BUILDINGS.find(x => x.id === id);
     if (!b) return;
+    clearRoomDetail();
     state.buildingId = id;
     state.level = (level !== undefined && b.floors.some(f => f.level === level))
       ? level
@@ -61,19 +68,37 @@
     state.campusView = false;
     state.picked = true;
     renderAll();
+    syncUrl();
   }
 
   function goToLevel(level) {
+    clearRoomDetail();
     state.level = level;
     state.campusView = false;
     renderAll();
+    syncUrl();
   }
 
   function showCampus() {
+    clearRoomDetail();
     state.campusView = true;
-    state.highlightRoomId = null;
-    el.roomDetail.classList.add('hidden');
     renderAll();
+    syncUrl();
+  }
+
+  /** Адрес страницы отражает текущий вид, чтобы им можно было поделиться. */
+  function syncUrl() {
+    const p = new URLSearchParams();
+    if (state.highlightRoomId) {
+      const item = searchIndex.find(x => x.id === state.highlightRoomId);
+      if (item && item.number) p.set('room', item.number);
+    }
+    if (!p.has('room') && !state.campusView) {
+      p.set('b', state.buildingId);
+      p.set('f', String(state.level));
+    }
+    const qs = p.toString();
+    history.replaceState(null, '', qs ? `?${qs}` : location.pathname);
   }
 
   function renderAll() {
@@ -181,6 +206,7 @@
     if (!item) return;
     state.highlightRoomId = roomId;
     renderMap();
+    syncUrl();
 
     const color = (CATEGORIES[item.categoryKey] || {}).color || '#333';
     el.roomDetail.classList.remove('hidden');
@@ -192,11 +218,22 @@
       <div class="room-detail-actions">
         <button class="btn-small" data-act="from">Отсюда</button>
         <button class="btn-small btn-primary" data-act="to">Сюда маршрут</button>
-      </div>`;
+      </div>
+      ${item.number ? '<button class="room-detail-share" data-act="share">Скопировать ссылку на аудиторию</button>' : ''}`;
     el.roomDetail.querySelector('.room-detail-close').addEventListener('click', () => {
-      el.roomDetail.classList.add('hidden');
-      state.highlightRoomId = null;
+      clearRoomDetail();
       renderMap();
+      syncUrl();
+    });
+    const share = el.roomDetail.querySelector('[data-act="share"]');
+    if (share) share.addEventListener('click', async () => {
+      const url = `${location.origin}${location.pathname}?room=${encodeURIComponent(item.number)}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        share.textContent = 'Ссылка скопирована';
+      } catch {
+        share.textContent = url;
+      }
     });
     el.roomDetail.querySelectorAll('[data-act]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -234,8 +271,32 @@
 
   function attachSearch(input, box, onPick, useFilter) {
     let timer = null;
+    let active = -1;
+
+    const rows = () => [...box.querySelectorAll('.search-result-item')];
+    function highlight(i) {
+      const list = rows();
+      if (!list.length) return;
+      active = (i + list.length) % list.length;
+      list.forEach((r, k) => r.classList.toggle('active', k === active));
+      list[active].scrollIntoView({ block: 'nearest' });
+    }
+
+    input.addEventListener('keydown', e => {
+      const list = rows();
+      if (e.key === 'Escape') { box.classList.remove('open'); active = -1; return; }
+      if (!box.classList.contains('open') || !list.length) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); highlight(active + 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); highlight(active - 1); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        list[active >= 0 ? active : 0].click();
+      }
+    });
+
     input.addEventListener('input', () => {
       clearTimeout(timer);
+      active = -1;
       timer = setTimeout(() => {
         const q = input.value;
         if (!q.trim()) { box.classList.remove('open'); clear(box); return; }
@@ -245,6 +306,7 @@
         renderDropdown(box, results, item => {
           input.value = `${item.number ? item.number + ' — ' : ''}${item.name}`;
           box.classList.remove('open');
+          active = -1;
           onPick(item);
         });
       }, 110);
@@ -456,16 +518,27 @@
   el.zoomReset.addEventListener('click', () => panzoom.reset());
   el.showCampusBtn.addEventListener('click', showCampus);
 
-  // Ссылка вида ?room=4016 открывает нужную аудиторию
-  const wanted = new URLSearchParams(location.search).get('room');
+  // Ссылки вида ?room=4016 (аудитория) и ?b=corpusV&f=4 (этаж корпуса)
+  const params = new URLSearchParams(location.search);
   let deepLink = null;
+  const wanted = params.get('room');
   if (wanted) {
     const hit = searchRooms(searchIndex, wanted, { limit: 1 })[0];
     if (hit) {
       state.buildingId = hit.buildingId;
       state.level = hit.level;
       state.campusView = false;
+      state.picked = true;
       deepLink = hit.id;
+    }
+  } else if (params.get('b')) {
+    const b = BUILDINGS.find(x => x.id === params.get('b'));
+    if (b) {
+      const lvl = Number(params.get('f'));
+      state.buildingId = b.id;
+      state.level = b.floors.some(f => f.level === lvl) ? lvl : b.floors[0].level;
+      state.campusView = false;
+      state.picked = true;
     }
   }
 

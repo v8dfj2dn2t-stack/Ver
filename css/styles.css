@@ -180,7 +180,8 @@ input { font-family: inherit; }
   border-bottom: 1px solid var(--border); font-size: 13px;
 }
 .search-result-item:last-child { border-bottom: none; }
-.search-result-item:hover { background: #f4f6fb; }
+.search-result-item:hover,
+.search-result-item.active { background: #e8edf9; }
 .search-result-num {
   flex-shrink: 0; min-width: 46px; text-align: center; font-weight: 700;
   color: var(--navy); font-size: 12px; background: #eef1fa;
@@ -334,6 +335,11 @@ input { font-family: inherit; }
   border-radius: 7px; padding: 7px 8px; font-size: 11.5px; font-weight: 600;
 }
 .btn-small.btn-primary { background: var(--navy); color: #fff; border-color: var(--navy); }
+.room-detail-share {
+  width: 100%; margin-top: 8px; border: none; background: none;
+  font-size: 11.5px; color: var(--navy); text-decoration: underline;
+  padding: 4px; text-align: left; word-break: break-all;
+}
 
 /* ---------------- Responsive ---------------- */
 @media (max-width: 900px) {
