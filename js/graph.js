@@ -92,7 +92,13 @@ function buildCampusGraph(buildings, campusLayout) {
         if (!stacks.has(key)) stacks.set(key, []);
         stacks.get(key).push({ level: f.level, nodeId: r.id, category: r.category });
       }
-      if (r.link) passages.push({ buildingId: b.id, link: r.link, nodeId: r.id, level: f.level });
+      if (r.link) {
+        // Переход соединяется с переходом того же этажа в соседнем
+        // корпусе; явный key связывает концы на разных отметках.
+        const key = r.passageKey
+          || `${[b.id, r.link].sort().join('|')}@${f.level}`;
+        passages.push({ buildingId: b.id, link: r.link, nodeId: r.id, level: f.level, key });
+      }
       if (r.isEntrance) entrances.push({ buildingId: b.id, nodeId: r.id });
     });
   });
@@ -109,9 +115,10 @@ function buildCampusGraph(buildings, campusLayout) {
   });
 
   // --- Территория кампуса ---
+  const hub = campusLayout.entranceMarker;
   addNode('campus:hub', {
     type: 'hub', label: 'Территория кампуса',
-    campusX: campusLayout.hub.x, campusY: campusLayout.hub.y,
+    campusX: hub.x, campusY: hub.y,
   });
   buildings.forEach(b => {
     const bl = campusLayout.buildings[b.id];
@@ -119,7 +126,7 @@ function buildCampusGraph(buildings, campusLayout) {
     addNode(`campus:${b.id}`, {
       type: 'outdoor', buildingId: b.id, buildingName: b.name,
       label: `Вход в ${b.name}`,
-      campusX: bl.x + bl.w / 2, campusY: bl.y + bl.h / 2,
+      campusX: bl.label.x, campusY: bl.label.y,
     });
     addEdge(`campus:${b.id}`, 'campus:hub', bl.walk, 'outdoor');
   });
@@ -131,9 +138,18 @@ function buildCampusGraph(buildings, campusLayout) {
   });
 
   // --- Крытые переходы: соединяются напрямую, минуя улицу ---
+  const byKey = new Map();
   passages.forEach(p => {
-    const match = passages.find(q => q.buildingId === p.link && q.link === p.buildingId);
-    if (match) addEdge(p.nodeId, match.nodeId, PASSAGE_COST, 'passage');
+    if (!byKey.has(p.key)) byKey.set(p.key, []);
+    byKey.get(p.key).push(p);
+  });
+  byKey.forEach(group => {
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        if (group[i].buildingId === group[j].buildingId) continue;
+        addEdge(group[i].nodeId, group[j].nodeId, PASSAGE_COST, 'passage');
+      }
+    }
   });
 
   return { nodes, adj, layouts };

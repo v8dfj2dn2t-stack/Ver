@@ -244,66 +244,73 @@ function pin(x, y, kind) {
 // Обзорная схема территории
 // ---------------------------------------------------------------------
 function computeCampusViewBox(layout) {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  Object.values(layout.buildings).forEach(b => {
-    minX = Math.min(minX, b.x); minY = Math.min(minY, b.y);
-    maxX = Math.max(maxX, b.x + b.w); maxY = Math.max(maxY, b.y + b.h);
-  });
-  const pad = 70;
-  return [minX - pad, minY - pad, (maxX - minX) + pad * 2, (maxY - minY) + pad * 2];
+  return layout.viewBox;
 }
 
 function renderCampusOverview(viewport, graph, buildings, layout, opts = {}) {
   clearNode(viewport);
   const { highlightBuildingId = null, routeNodeIds = null, onSelectBuilding = () => {} } = opts;
 
-  // Связи между корпусами
-  const gLinks = se('g', { class: 'campus-links' });
-  (layout.links || []).forEach(([a, b, w, kind]) => {
-    const A = layout.buildings[a], B = layout.buildings[b];
-    if (!A || !B) return;
-    gLinks.appendChild(se('line', {
-      x1: A.x + A.w / 2, y1: A.y + A.h / 2,
-      x2: B.x + B.w / 2, y2: B.y + B.h / 2,
-      class: kind === 'переход' ? 'campus-link campus-link--indoor' : 'campus-link',
-    }));
+  const { x: px, y: py } = layout.pivot;
+  // Весь план наклонён, как на схеме кампуса; подписи разворачиваем обратно.
+  const root = se('g', { transform: `rotate(${layout.rotate} ${px} ${py})` });
+  const upright = (x, y) => `rotate(${-layout.rotate} ${x} ${y})`;
+
+  // Крытые переходы между корпусами
+  const gPass = se('g', { class: 'campus-passages' });
+  (layout.passages || []).forEach(p => {
+    const [x, y, w, h] = p.rect;
+    gPass.appendChild(se('rect', { x, y, width: w, height: h, class: 'campus-passage' }));
   });
-  viewport.appendChild(gLinks);
+  root.appendChild(gPass);
+
+  // Корпуса
+  buildings.forEach(b => {
+    const bl = layout.buildings[b.id];
+    if (!bl) return;
+    const active = highlightBuildingId === b.id;
+    const g = se('g', { class: 'campus-building' + (active ? ' active' : '') });
+    g.style.cursor = 'pointer';
+    g.appendChild(se('path', {
+      d: bl.path, class: 'campus-building-shape', fill: bl.color, stroke: bl.color,
+    }));
+
+    const lx = bl.label.x, ly = bl.label.y;
+    const gl = se('g', { transform: upright(lx, ly), class: 'campus-label' });
+    gl.appendChild(se('circle', { cx: lx, cy: ly - 22, r: 15, class: 'campus-badge' }));
+    gl.appendChild(txt(se('text', { x: lx, y: ly - 16, class: 'campus-badge-num' }), String(bl.n)));
+    gl.appendChild(txt(se('text', { x: lx, y: ly + 8, class: 'campus-building-label' }), b.name));
+    gl.appendChild(txt(se('text', { x: lx, y: ly + 24, class: 'campus-building-sub' }), `${b.floors.length} эт.`));
+    g.appendChild(gl);
+
+    g.addEventListener('click', () => onSelectBuilding(b.id));
+    root.appendChild(g);
+  });
+
+  // Отметка главного входа
+  const em = layout.entranceMarker;
+  if (em) {
+    const gm = se('g', { class: 'campus-entrance' });
+    gm.appendChild(se('line', { x1: em.x, y1: em.y, x2: em.x - 26, y2: em.y - 46, 'marker-end': 'url(#arrow-in)' }));
+    const gt = se('g', { transform: upright(em.x, em.y) });
+    gt.appendChild(txt(se('text', { x: em.x + 6, y: em.y + 22, class: 'campus-entrance-label' }), em.label));
+    gm.appendChild(gt);
+    root.appendChild(gm);
+  }
 
   // Маршрут по территории
   if (routeNodeIds && routeNodeIds.length > 1) {
     const pts = routeNodeIds.map(id => graph.nodes.get(id)).filter(n => n && n.campusX !== undefined);
     if (pts.length > 1) {
       const d = pts.map((n, i) => `${i ? 'L' : 'M'} ${n.campusX} ${n.campusY}`).join(' ');
-      viewport.appendChild(se('path', { d, class: 'route-shadow' }));
-      viewport.appendChild(se('path', { d, class: 'route-line route-line--campus' }));
+      root.appendChild(se('path', { d, class: 'route-shadow' }));
+      root.appendChild(se('path', { d, class: 'route-line route-line--campus' }));
+      if (opts.isRouteStart) root.appendChild(pin(pts[0].campusX, pts[0].campusY, 'start'));
+      if (opts.isRouteEnd) root.appendChild(pin(pts[pts.length - 1].campusX, pts[pts.length - 1].campusY, 'end'));
     }
   }
 
-  // Корпуса
-  buildings.forEach(b => {
-    const bl = layout.buildings[b.id];
-    if (!bl) return;
-    const g = se('g', { class: 'campus-building' + (highlightBuildingId === b.id ? ' active' : '') });
-    g.style.cursor = 'pointer';
-    g.appendChild(se('rect', { x: bl.x, y: bl.y, width: bl.w, height: bl.h, rx: 6, class: 'campus-building-rect' }));
-    g.appendChild(txt(se('text', {
-      x: bl.x + bl.w / 2, y: bl.y + bl.h / 2 - 4, class: 'campus-building-label',
-    }), b.name));
-    g.appendChild(txt(se('text', {
-      x: bl.x + bl.w / 2, y: bl.y + bl.h / 2 + 16, class: 'campus-building-sub',
-    }), `${b.floors.length} эт. · ${b.code}`));
-    g.addEventListener('click', () => onSelectBuilding(b.id));
-    viewport.appendChild(g);
-  });
-
-  if (routeNodeIds && routeNodeIds.length) {
-    const pts = routeNodeIds.map(id => graph.nodes.get(id)).filter(n => n && n.campusX !== undefined);
-    if (pts.length) {
-      if (opts.isRouteStart) viewport.appendChild(pin(pts[0].campusX, pts[0].campusY, 'start'));
-      if (opts.isRouteEnd) viewport.appendChild(pin(pts[pts.length - 1].campusX, pts[pts.length - 1].campusY, 'end'));
-    }
-  }
+  viewport.appendChild(root);
 }
 
 if (typeof window !== 'undefined') {

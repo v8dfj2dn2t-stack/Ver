@@ -11,6 +11,7 @@
     buildingId: BUILDINGS[0].id,
     level: 1,
     campusView: true,
+    picked: false,
     categoryFilter: null,
     highlightRoomId: null,
     route: null,
@@ -58,6 +59,7 @@
       ? level
       : (b.floors.find(f => f.level === 1) || b.floors[0]).level;
     state.campusView = false;
+    state.picked = true;
     renderAll();
   }
 
@@ -157,7 +159,7 @@
     if (state.campusView) {
       svg.setAttribute('viewBox', computeCampusViewBox(CAMPUS_LAYOUT).join(' '));
       renderCampusOverview(viewport, graph, BUILDINGS, CAMPUS_LAYOUT, {
-        highlightBuildingId: state.buildingId,
+        highlightBuildingId: state.picked ? state.buildingId : null,
         routeNodeIds: ids, isRouteStart: isStart, isRouteEnd: isEnd,
         onSelectBuilding: goToBuilding,
       });

@@ -90,6 +90,7 @@ function layoutFloor(building, floor) {
           category: spec.cat,
           stack: spec.stack || null,
           link: spec.link || null,
+          passageKey: spec.key || null,
           isEntrance: !!spec.isEntrance,
           rect, door, attach,
           cx: rect.x + rect.w / 2,

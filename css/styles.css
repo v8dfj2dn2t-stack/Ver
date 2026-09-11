@@ -286,13 +286,34 @@ input { font-family: inherit; }
 .route-pin--end .route-pin-dot { fill: var(--danger); }
 
 /* ---- Территория ---- */
-.campus-link { stroke: #b9c2d6; stroke-width: 4; stroke-dasharray: 3 8; stroke-linecap: round; }
-.campus-link--indoor { stroke: #94a3b8; stroke-dasharray: none; stroke-width: 7; }
-.campus-building-rect { fill: #fff; stroke: var(--navy); stroke-width: 2.5; }
-.campus-building:hover .campus-building-rect { fill: #eef1fa; }
-.campus-building.active .campus-building-rect { fill: #fff6dd; stroke: var(--gold); stroke-width: 3.5; }
-.campus-building-label { text-anchor: middle; font-size: 16px; font-weight: 700; fill: var(--navy); }
-.campus-building-sub { text-anchor: middle; font-size: 12px; fill: var(--text-muted); }
+.campus-passage { fill: #c3ccd9; stroke: #96a2b4; stroke-width: 2; }
+
+.campus-building-shape {
+  fill-opacity: 0.85; stroke-width: 3; stroke-linejoin: round;
+  transition: fill-opacity 0.15s;
+}
+.campus-building:hover .campus-building-shape { fill-opacity: 1; }
+.campus-building.active .campus-building-shape {
+  fill-opacity: 1; stroke: #12295a; stroke-width: 5;
+}
+
+.campus-label { pointer-events: none; }
+.campus-badge { fill: rgba(255,255,255,0.92); stroke: rgba(0,0,0,0.25); stroke-width: 1.5; }
+.campus-badge-num { text-anchor: middle; font-size: 17px; font-weight: 800; fill: #16203a; }
+.campus-building-label {
+  text-anchor: middle; font-size: 15px; font-weight: 700; fill: #fff;
+  paint-order: stroke; stroke: rgba(20,28,48,0.75); stroke-width: 4; stroke-linejoin: round;
+}
+.campus-building-sub {
+  text-anchor: middle; font-size: 12px; fill: #fff;
+  paint-order: stroke; stroke: rgba(20,28,48,0.7); stroke-width: 3.5; stroke-linejoin: round;
+}
+
+.campus-entrance line { stroke: #16203a; stroke-width: 3; color: #16203a; }
+.campus-entrance-label {
+  text-anchor: middle; font-size: 15px; font-weight: 700; fill: #16203a;
+  paint-order: stroke; stroke: rgba(255,255,255,0.9); stroke-width: 4; stroke-linejoin: round;
+}
 
 /* ---- Карточка помещения ---- */
 .room-detail {
