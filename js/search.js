@@ -23,7 +23,9 @@ function buildSearchIndex(graph, buildings) {
         buildingCode: b.code,
         level: r.level,
         floorLabel: r.floorLabel,
-        searchText: normalize(`${r.number} ${r.name} ${cat.label} ${cat.short} ${b.name} ${b.code} ${r.floorLabel}`),
+        // Название этажа в индекс не идёт: иначе запрос «зал №8» ловил
+        // бы все комнаты этажа «2 этаж — деканаты, зал №8».
+        searchText: normalize(`${r.number} ${r.name} ${cat.label} ${cat.short} ${b.name} ${b.code}`),
         numberNorm: normalize(r.number),
       });
     });

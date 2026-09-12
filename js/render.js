@@ -45,7 +45,7 @@ function wrapLabel(str, widthPx, fontPx, maxLines = 2) {
 // ---------------------------------------------------------------------
 // Легенда
 // ---------------------------------------------------------------------
-const LEGEND_HIDDEN = new Set(['stairs', 'elevator', 'entrance', 'passage', 'lobby', 'service', 'restroom']);
+const LEGEND_HIDDEN = new Set(['stairs', 'elevator', 'passage', 'lobby', 'service', 'restroom', 'language']);
 
 function renderLegend(container, categories, activeFilter, onToggle) {
   clearNode(container);

@@ -120,21 +120,30 @@ function buildCampusGraph(buildings, campusLayout) {
     type: 'hub', label: 'Территория кампуса',
     campusX: hub.x, campusY: hub.y,
   });
-  buildings.forEach(b => {
-    const bl = campusLayout.buildings[b.id];
+
+  // У каждого входа своя точка на улице. Общая точка на корпус давала
+  // бы «телепорт»: выйти в одну дверь и войти в другую оказалось бы
+  // дешевле, чем пройти по коридору.
+  const outdoorByBuilding = new Map();
+  entrances.forEach((e, i) => {
+    const bl = campusLayout.buildings[e.buildingId];
     if (!bl) return;
-    addNode(`campus:${b.id}`, {
-      type: 'outdoor', buildingId: b.id, buildingName: b.name,
-      label: `Вход в ${b.name}`,
+    const b = buildings.find(x => x.id === e.buildingId);
+    const id = `campus:${e.buildingId}:${i}`;
+    addNode(id, {
+      type: 'outdoor', buildingId: e.buildingId, buildingName: b.name,
+      label: `Улица у «${b.name}»`,
       campusX: bl.label.x, campusY: bl.label.y,
     });
-    addEdge(`campus:${b.id}`, 'campus:hub', bl.walk, 'outdoor');
+    addEdge(e.nodeId, id, 5, 'door');
+    addEdge(id, 'campus:hub', bl.walk, 'outdoor');
+    if (!outdoorByBuilding.has(e.buildingId)) outdoorByBuilding.set(e.buildingId, id);
   });
-  entrances.forEach(e => addEdge(e.nodeId, `campus:${e.buildingId}`, 5, 'door'));
 
   // --- Дорожки по территории между корпусами ---
   (campusLayout.links || []).forEach(([a, bId, w]) => {
-    addEdge(`campus:${a}`, `campus:${bId}`, w, 'outdoor');
+    const from = outdoorByBuilding.get(a), to = outdoorByBuilding.get(bId);
+    if (from && to) addEdge(from, to, w, 'outdoor');
   });
 
   // --- Крытые переходы: соединяются напрямую, минуя улицу ---
