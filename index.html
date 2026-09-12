@@ -39,15 +39,17 @@
       <div class="legend" id="legend"></div>
 
       <div class="disclaimer">
-        <p><strong>Об источниках.</strong> Состав корпусов, их этажность, нумерация
-        помещений и то, что находится на каком этаже, взяты из официальных описаний
-        корпусов МГИМО (<a href="https://mgimo.ru/territory/campus/" target="_blank" rel="noopener">mgimo.ru/territory/campus</a>,
-        <a href="https://mgimo.ru/territory/map/" target="_blank" rel="noopener">карта университета</a>)
-        и <a href="https://studsouz.mgimo.ru/rubrics/mgimo-guide/infrastructure/" target="_blank" rel="noopener">справочника Студсоюза</a>.</p>
-        <p><strong>Что остаётся приблизительным:</strong> геометрия помещений. Планы
-        построены по коридорной логике корпусов, а не обведены с планов БТИ, поэтому
-        положение конкретной комнаты внутри этажа условно. Номера, названия и этажи
-        подразделений — по официальным данным.</p>
+        <p><strong>Источник — МГИМО.</strong> Этажи с отметкой
+        <span class="plan-badge plan-badge--official">официальный план</span>
+        показаны по настоящим поэтажным планам университета с их собственными
+        номерами и назначением помещений. Планы и описания взяты со страниц
+        <a href="https://mgimo.ru/territory/campus/" target="_blank" rel="noopener">mgimo.ru/territory/campus</a>
+        и <a href="https://mgimo.ru/territory/map/" target="_blank" rel="noopener">карты университета</a>.
+        Права на планы принадлежат МГИМО.</p>
+        <p>Этажи с отметкой <span class="plan-badge">схема</span> — реконструкция:
+        официальный план этого этажа недоступен, поэтому планировка построена по
+        коридорной логике корпуса. Этажность, нумерация и состав подразделений на
+        них тоже официальные, условна только геометрия.</p>
       </div>
     </div>
 
@@ -111,6 +113,8 @@
 </div>
 
 <script src="js/data.js"></script>
+<script src="js/plans-data.js"></script>
+<script src="js/plans.js"></script>
 <script src="js/layout.js"></script>
 <script src="js/graph.js"></script>
 <script src="js/search.js"></script>

@@ -350,3 +350,80 @@ input { font-family: inherit; }
   .floor-note { display: none; }
   .brand p { display: none; }
 }
+
+/* ---- Официальные поэтажные планы МГИМО ---- */
+.official-plan .plan-shape {
+  fill: #e7ebf3;
+  stroke: #9aa6bd;
+  stroke-width: 1.1;
+  vector-effect: non-scaling-stroke;
+  /* Стены и коридоры не перехватывают клики по помещениям */
+  pointer-events: none;
+}
+.official-plan .plan-room {
+  fill: #f7f9fc;
+  stroke: #64748b;
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+}
+.official-plan .plan-room:hover { fill: #dbe6fb; }
+.official-plan .plan-room--dim { opacity: 0.3; }
+.official-plan .plan-room--highlight {
+  fill: #ffd9d9;
+  stroke: var(--danger);
+  stroke-width: 3.5;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+/* Цвет по назначению помещения */
+.official-plan .plan-room[data-cat="audience"]   { fill: #dbe7f7; }
+.official-plan .plan-room[data-cat="lecture"]    { fill: #cddcfa; }
+.official-plan .plan-room[data-cat="clinic"]     { fill: #fbdcdc; }
+.official-plan .plan-room[data-cat="cafe"]       { fill: #fdeac4; }
+.official-plan .plan-room[data-cat="canteen"]    { fill: #fde0c6; }
+.official-plan .plan-room[data-cat="shop"]       { fill: #fbf0c2; }
+.official-plan .plan-room[data-cat="bank"]       { fill: #cfeaf2; }
+.official-plan .plan-room[data-cat="library"]    { fill: #e6dcfa; }
+.official-plan .plan-room[data-cat="editorial"]  { fill: #d3ecf8; }
+.official-plan .plan-room[data-cat="dean"]       { fill: #f7ecc6; }
+.official-plan .plan-room[data-cat="dept"]       { fill: #e8ddfb; }
+.official-plan .plan-room[data-cat="admin"]      { fill: #f5e2cd; }
+.official-plan .plan-room[data-cat="military"]   { fill: #e0ecc9; }
+.official-plan .plan-room[data-cat="computer"]   { fill: #d3f2e3; }
+.official-plan .plan-room[data-cat="sport"]      { fill: #d0f0e0; }
+.official-plan .plan-room[data-cat="pool"]       { fill: #cfe8f8; }
+.official-plan .plan-room[data-cat="culture"]    { fill: #eedcfa; }
+.official-plan .plan-room[data-cat="pass_office"]{ fill: #f0ddd2; }
+.official-plan .plan-room[data-cat="wardrobe"],
+.official-plan .plan-room[data-cat="restroom"],
+.official-plan .plan-room[data-cat="service"]    { fill: #eef1f6; }
+.official-plan .plan-room[data-cat="stairs"],
+.official-plan .plan-room[data-cat="elevator"]   { fill: #e2e6ee; }
+.official-plan .plan-room[data-cat="entrance"]   { fill: #d6f2dd; }
+.official-plan .plan-room[data-cat="passage"]    { fill: #d2f0ec; }
+
+.plan-label {
+  text-anchor: middle;
+  fill: #22304d;
+  font-weight: 600;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: rgba(255,255,255,0.85);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+
+.plan-badge {
+  display: inline-block; vertical-align: middle; margin-left: 6px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; padding: 2px 7px; border-radius: 999px;
+  background: #e6e9f0; color: var(--text-muted);
+}
+.plan-badge--official { background: #d8f0dd; color: #14683a; }
+
+.room-detail-info {
+  font-size: 11.5px; line-height: 1.5; color: var(--text);
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);
+  max-height: 150px; overflow-y: auto;
+}

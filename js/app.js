@@ -151,8 +151,14 @@
       return;
     }
     const b = building(), f = floorOf();
-    el.breadcrumb.textContent = `${b.name} · ${f.label}`;
-    el.floorNote.textContent = f.note || '';
+    const official = hasOfficialPlan(b.id, f.level);
+    el.breadcrumb.innerHTML = `${b.name} · ${f.label}`
+      + (official
+        ? ' <span class="plan-badge plan-badge--official">официальный план</span>'
+        : ' <span class="plan-badge">схема</span>');
+    el.floorNote.textContent = official
+      ? 'Официальный поэтажный план МГИМО. Нажмите на помещение, чтобы увидеть его назначение.'
+      : (f.note || '');
     el.numberingHint.textContent = b.numbering || '';
   }
 
@@ -175,7 +181,104 @@
     });
   }
 
+  /** Отрисовка официального поэтажного плана МГИМО. */
+  async function renderOfficialFloor() {
+    const b = building(), f = floorOf();
+    const plan = await loadPlan(b.id, f.level);
+    if (!plan) return false;
+
+    while (viewport.firstChild) viewport.removeChild(viewport.firstChild);
+    svg.setAttribute('viewBox', plan.viewBox.join(' '));
+    const { group, rooms } = mountPlan(viewport, plan);
+    labelPlan(group, rooms, plan.viewBox);
+
+    const prefix = `plan:${b.id}:${f.level}:`;
+    group.querySelectorAll('.plan-room').forEach(el => {
+      el.addEventListener('click', () => showRoomDetail(prefix + el.dataset.planRoom));
+      if (state.categoryFilter && el.dataset.cat !== state.categoryFilter) el.classList.add('plan-room--dim');
+    });
+
+    if (state.highlightRoomId && state.highlightRoomId.startsWith(prefix)) {
+      const svgId = state.highlightRoomId.slice(prefix.length);
+      const el = [...group.querySelectorAll('.plan-room')].find(x => x.dataset.planRoom === svgId);
+      if (el) el.classList.add('plan-room--highlight');
+    }
+
+    drawPlanRoute(group, plan, rooms);
+    panzoom.reset();
+    return true;
+  }
+
+  /** Маршрут по настоящей геометрии плана (A* по свободному месту). */
+  function drawPlanRoute(group, plan, rooms) {
+    if (!state.route) return;
+    const onThisFloor = state.route.path
+      .map(id => ({ id, n: graph.nodes.get(id) }))
+      .filter(x => x.n.type === 'planroom' && x.n.buildingId === plan.meta.b && x.n.level === plan.meta.lvl);
+    if (!onThisFloor.length) return;
+
+    const byId = new Map(rooms.map(r => [r.id, r]));
+    const center = svgId => {
+      const r = byId.get(svgId);
+      return r ? { x: r.box.x + r.box.width / 2, y: r.box.y + r.box.height / 2 } : null;
+    };
+    const NS = 'http://www.w3.org/2000/svg';
+
+    if (onThisFloor.length >= 2) {
+      const from = center(onThisFloor[0].n.svgId);
+      const to = center(onThisFloor[onThisFloor.length - 1].n.svgId);
+      if (from && to) {
+        const grid = buildPlanGrid(group, plan);
+        const res = findPathOnPlan(grid, from, to);
+        if (res) {
+          const d = [{ x: from.x, y: from.y }, ...res.points, { x: to.x, y: to.y }]
+            .map((pt, i) => `${i ? 'L' : 'M'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(' ');
+          const w = Math.max(plan.viewBox[2], plan.viewBox[3]) / 200;
+          [['route-shadow', w * 1.9], ['route-line', w]].forEach(([cls, sw]) => {
+            const path = document.createElementNS(NS, 'path');
+            path.setAttribute('d', d);
+            path.setAttribute('class', cls);
+            path.setAttribute('stroke-width', sw);
+            group.appendChild(path);
+          });
+        }
+      }
+    }
+
+    // Метки начала и конца всего маршрута, если они на этом этаже
+    const path = state.route.path;
+    const mark = (nodeId, kind) => {
+      const n = graph.nodes.get(nodeId);
+      if (!n || n.type !== 'planroom' || n.buildingId !== plan.meta.b || n.level !== plan.meta.lvl) return;
+      const c = center(n.svgId);
+      if (!c) return;
+      const r = Math.max(plan.viewBox[2], plan.viewBox[3]) / 90;
+      const g = document.createElementNS(NS, 'g');
+      g.setAttribute('class', `route-pin route-pin--${kind}`);
+      g.setAttribute('transform', `translate(${c.x} ${c.y})`);
+      const halo = document.createElementNS(NS, 'circle');
+      halo.setAttribute('r', r); halo.setAttribute('class', 'route-pin-halo');
+      const dot = document.createElementNS(NS, 'circle');
+      dot.setAttribute('r', r * 0.55); dot.setAttribute('class', 'route-pin-dot');
+      g.appendChild(halo); g.appendChild(dot);
+      group.appendChild(g);
+    };
+    mark(path[0], 'start');
+    mark(path[path.length - 1], 'end');
+  }
+
   function renderMap() {
+    if (!state.campusView && hasOfficialPlan(state.buildingId, state.level)) {
+      renderOfficialFloor().catch(err => {
+        console.error(err);
+        renderSchematicMap();
+      });
+      return;
+    }
+    renderSchematicMap();
+  }
+
+  function renderSchematicMap() {
     const ids = routeNodesForView();
     const p = state.route ? state.route.path : null;
     const isStart = !!(ids && ids.length && p && ids[0] === p[0]);
@@ -209,12 +312,14 @@
     syncUrl();
 
     const color = (CATEGORIES[item.categoryKey] || {}).color || '#333';
+    const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
     el.roomDetail.classList.remove('hidden');
     el.roomDetail.innerHTML = `
       <button class="room-detail-close" aria-label="Закрыть">×</button>
       <div class="room-detail-cat" style="color:${color}">${item.categoryLabel}</div>
-      <div class="room-detail-title">${item.number ? item.number + ' — ' : ''}${item.name}</div>
+      <div class="room-detail-title">${item.name}</div>
       <div class="room-detail-meta">${item.buildingName} · ${item.floorLabel}</div>
+      ${item.info ? `<div class="room-detail-info">${esc(item.info)}</div>` : ''}
       <div class="room-detail-actions">
         <button class="btn-small" data-act="from">Отсюда</button>
         <button class="btn-small btn-primary" data-act="to">Сюда маршрут</button>
@@ -359,6 +464,7 @@
       if (r.category === 'entrance') return 'выхода';
       return r.number ? `${r.name} (${r.number})` : r.name;
     }
+    if (n.type === 'planroom') return n.code ? `${n.label} (${n.code})` : n.label;
     if (n.type === 'outdoor') return n.buildingName;
     return 'коридора';
   }

@@ -161,6 +161,33 @@ function buildCampusGraph(buildings, campusLayout) {
     }
   });
 
+  // --- Помещения с официальных планов ---
+  // Там, где есть официальный план этажа, помещения берём с него.
+  // В графе они подключаются к коридору своего этажа: точное расстояние
+  // внутри этажа считается отдельно по геометрии плана (plans.js).
+  if (typeof OFFICIAL_PLANS !== 'undefined') {
+    Object.values(OFFICIAL_PLANS).forEach(plan => {
+      const b = buildings.find(x => x.id === plan.b);
+      if (!b) return;
+      const f = b.floors.find(x => x.level === plan.lvl);
+      let anchor = null;
+      for (const [id, n] of nodes) {
+        if (n.type === 'corridor' && n.buildingId === plan.b && n.level === plan.lvl) { anchor = id; break; }
+      }
+      if (!anchor) return;
+      Object.entries(plan.rooms).forEach(([svgId, r]) => {
+        const id = `plan:${plan.b}:${plan.lvl}:${svgId}`;
+        addNode(id, {
+          type: 'planroom', buildingId: plan.b, buildingName: b.name,
+          level: plan.lvl, floorLabel: f ? f.label : '',
+          planKey: `${plan.b}:${plan.lvl}`, svgId,
+          label: r.n, code: r.code || '', info: r.i, category: r.c,
+        });
+        addEdge(id, anchor, 20, 'walk');
+      });
+    });
+  }
+
   return { nodes, adj, layouts };
 }
 

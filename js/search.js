@@ -6,10 +6,42 @@ function normalize(s) {
   return (s || '').toString().toLowerCase().replace(/ё/g, 'е').replace(/[.\s-]+/g, ' ').trim();
 }
 
+/** Из названия вида «ГЦ-27», «Ц-019», «102», «45-А» достаём номер. */
+function numberFromName(name) {
+  const m = name.match(/^([А-ЯЁA-Z]{0,3}-?\d{1,4}[а-яёa-z]?(?:-[А-ЯЁA-Z])?)(?:\s|$)/);
+  return m ? m[1] : '';
+}
+
 function buildSearchIndex(graph, buildings) {
   const index = [];
+
+  // Помещения с официальных планов этажей
+  graph.nodes.forEach((n, id) => {
+    if (n.type !== 'planroom') return;
+    const cat = CATEGORIES[n.category] || CATEGORIES.service;
+    const number = n.code || '';
+    index.push({
+      id,
+      number,
+      name: number && n.label !== number ? `${number} — ${n.label}` : n.label,
+      info: n.info || '',
+      official: true,
+      categoryKey: n.category,
+      categoryLabel: cat.label,
+      buildingId: n.buildingId,
+      buildingName: n.buildingName,
+      buildingCode: (buildings.find(b => b.id === n.buildingId) || {}).code || '',
+      level: n.level,
+      floorLabel: n.floorLabel,
+      searchText: normalize(`${number} ${n.label} ${n.info || ''} ${cat.label} ${n.buildingName}`),
+      numberNorm: normalize(number),
+    });
+  });
+
   graph.layouts.forEach(L => {
     const b = L.building;
+    // На этажах с официальным планом схематичные помещения не нужны
+    if (typeof hasOfficialPlan === 'function' && hasOfficialPlan(b.id, L.floor.level)) return;
     L.rooms.forEach(r => {
       const cat = CATEGORIES[r.category] || CATEGORIES.audience;
       index.push({
