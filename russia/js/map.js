@@ -636,15 +636,22 @@ function select(code, zoom) {
   selected = byCode[code] || null;
   regions.forEach(function (r) { r.el.classList.toggle('sel', r === selected); });
   document.querySelectorAll('.reg-item').forEach(function (n) {
-    n.classList.toggle('active', n.dataset.code === code);
+    n.setAttribute('aria-current', n.dataset.code === code ? 'true' : 'false');
   });
   renderCard();
+  announce(selected ? selected.name + ', столица ' + selected.capital : 'Выбор снят');
   if (selected && zoom) zoomTo(selected.bbox, selected.mainArea < 400 ? 4 : 1.5);
   else scheduleLabels();
   if (selected) {
     var node = document.querySelector('.reg-item[data-code="' + code + '"]');
     if (node) node.scrollIntoView({ block: 'nearest' });
   }
+}
+
+// короткое сообщение для скринридера: что сейчас выбрано на карте
+function announce(text) {
+  var box = document.getElementById('map-status');
+  if (box) box.textContent = text;
 }
 
 function renderCard() {
@@ -656,7 +663,7 @@ function renderCard() {
   }
   var r = selected;
   var dens = (r.pop / r.area).toFixed(r.pop / r.area < 10 ? 2 : 1);
-  var html = '<h3>' + r.name + '</h3>' +
+  var html = '<h3 class="card-title">' + r.name + '</h3>' +
     '<p class="card-type">' + r.type +
       ' · ' + DNAME[r.district] + ' федеральный округ</p>' +
     '<dl>' +
@@ -705,15 +712,17 @@ function buildSidebar() {
     var list = regions.filter(function (r) { return r.district === d[0]; });
     if (!list.length) return;
     list.sort(function (a, b) { return a.name.localeCompare(b.name, 'ru'); });
-    html += '<div class="dist"><h4><i style="background:' + d[2] + '"></i>' +
-            d[1] + ' ФО' +
-            '<span>' + list.length + '</span></h4>';
+    html += '<section class="dist"><h3><i style="background:' + d[2] + '" aria-hidden="true"></i>' +
+            d[1] + ' ФО<span class="count">' + list.length +
+            '<span class="sr-only"> субъектов</span></span></h3><ul>';
     list.forEach(function (r) {
-      html += '<button type="button" class="reg-item" data-code="' + r.code + '">' +
+      html += '<li><button type="button" class="reg-item" data-code="' + r.code + '"' +
+              ' aria-current="false">' +
               '<span class="ri-name">' + r.short + '</span>' +
-              '<span class="ri-cap">' + r.capital + '</span></button>';
+              '<span class="ri-cap"><span class="sr-only">столица </span>' + r.capital +
+              '</span></button></li>';
     });
-    html += '</div>';
+    html += '</ul></section>';
   });
   wrap.innerHTML = html;
   wrap.addEventListener('click', function (e) {
@@ -728,15 +737,15 @@ function buildLegend() {
     var html = '';
     if (opts.colorBy === 'district') {
       DISTRICTS.forEach(function (d) {
-        html += '<span class="lg"><i style="background:' + d[2] + '"></i>' +
-                d[1] + '</span>';
+        html += '<li><i style="background:' + d[2] + '" aria-hidden="true"></i>' +
+                d[1] + '<span class="sr-only"> федеральный округ</span></li>';
       });
     } else {
       TYPES.forEach(function (t) {
-        html += '<span class="lg"><i style="background:' + t[1] + '"></i>' + t[0] + '</span>';
+        html += '<li><i style="background:' + t[1] + '" aria-hidden="true"></i>' + t[0] + '</li>';
       });
     }
-    html += '<span class="lg"><i class="lg-riv"></i>Крупные реки</span>';
+    html += '<li><i class="lg-riv" aria-hidden="true"></i>Крупные реки</li>';
     wrap.innerHTML = html;
   }
   paint();
@@ -746,43 +755,83 @@ function buildLegend() {
 function buildSearch() {
   var input = document.getElementById('search');
   var drop = document.getElementById('search-results');
-  var items = [];
+  var status = document.getElementById('search-status');
+  var items = [], hits = [], cursor = -1;
+
   regions.forEach(function (r) {
-    items.push({ t: r.short, s: 'субъект · столица ' + r.capital, code: r.code });
-    items.push({ t: r.capital, s: 'столица · ' + r.short, code: r.code });
+    items.push({ t: r.short, s: 'субъект, столица ' + r.capital, code: r.code });
+    items.push({ t: r.capital, s: 'столица, ' + r.short, code: r.code });
   });
   riverData.forEach(function (rv) {
-    items.push({ t: rv.name, s: 'река' + (rv.length ? ' · ' + fmt(rv.length) + ' км' : ''),
+    items.push({ t: rv.name, s: 'река' + (rv.length ? ', ' + fmt(rv.length) + ' км' : ''),
                  river: rv });
   });
-  function close() { drop.classList.remove('open'); drop.innerHTML = ''; }
+
+  function close() {
+    drop.classList.remove('open');
+    drop.innerHTML = '';
+    input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+    hits = []; cursor = -1;
+  }
+
+  function highlight(i) {
+    var nodes = drop.querySelectorAll('li');
+    if (!nodes.length) return;
+    cursor = (i + nodes.length) % nodes.length;
+    nodes.forEach(function (n, j) { n.setAttribute('aria-selected', j === cursor ? 'true' : 'false'); });
+    input.setAttribute('aria-activedescendant', nodes[cursor].id);
+    nodes[cursor].scrollIntoView({ block: 'nearest' });
+  }
+
+  function choose(i) {
+    var h = hits[i];
+    if (!h) return;
+    if (h.code) select(h.code, true);
+    else { focusRiver(h.river); announce('Река ' + h.t); }
+    input.value = h.t;
+    close();
+  }
+
   input.addEventListener('input', function () {
     var q = input.value.trim().toLowerCase();
-    if (q.length < 2) return close();
-    var hits = items.filter(function (i) {
+    if (q.length < 2) { close(); status.textContent = ''; return; }
+    hits = items.filter(function (i) {
       return i.t.toLowerCase().indexOf(q) >= 0;
     }).sort(function (a, b) {
       return a.t.toLowerCase().indexOf(q) - b.t.toLowerCase().indexOf(q) || a.t.length - b.t.length;
     }).slice(0, 12);
-    if (!hits.length) { drop.innerHTML = '<div class="sr-empty">Ничего не найдено</div>'; drop.classList.add('open'); return; }
+    if (!hits.length) {
+      drop.innerHTML = '<li class="sr-empty" role="presentation">Ничего не найдено</li>';
+      drop.classList.add('open');
+      input.setAttribute('aria-expanded', 'true');
+      status.textContent = 'Ничего не найдено';
+      return;
+    }
     drop.innerHTML = hits.map(function (h, i) {
-      return '<button type="button" data-i="' + i + '"><b>' + h.t + '</b><span>' + h.s + '</span></button>';
+      return '<li id="sr-opt-' + i + '" role="option" aria-selected="false">' +
+             '<b>' + h.t + '</b><span class="sr-desc">' + h.s + '</span></li>';
     }).join('');
     drop.classList.add('open');
-    drop.querySelectorAll('button').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var h = hits[+b.dataset.i];
-        if (h.code) select(h.code, true);
-        else focusRiver(h.river);
-        input.value = h.t;
-        close();
-      });
+    input.setAttribute('aria-expanded', 'true');
+    cursor = -1;
+    status.textContent = 'Найдено вариантов: ' + hits.length +
+                         '. Перебирайте стрелками, Enter — открыть.';
+    drop.querySelectorAll('li').forEach(function (n, i) {
+      n.addEventListener('click', function () { choose(i); });
     });
   });
+
   input.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') { close(); input.blur(); }
-    if (e.key === 'Enter') { var f = drop.querySelector('button'); if (f) f.click(); }
+    if (e.key === 'Escape') { close(); input.blur(); return; }
+    if (!hits.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); highlight(cursor + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); highlight(cursor - 1); }
+    else if (e.key === 'Home') { e.preventDefault(); highlight(0); }
+    else if (e.key === 'End') { e.preventDefault(); highlight(hits.length - 1); }
+    else if (e.key === 'Enter') { e.preventDefault(); choose(cursor < 0 ? 0 : cursor); }
   });
+
   document.addEventListener('click', function (e) {
     if (!e.target.closest('.search-wrap')) close();
   });
@@ -823,6 +872,7 @@ function updateScaleBar() {
   var bar = document.getElementById('scalebar');
   bar.style.width = w.toFixed(1) + 'px';
   bar.querySelector('span').textContent = fmt(pick) + ' км';
+  bar.setAttribute('aria-label', 'отрезок на карте — ' + fmt(pick) + ' км');
 }
 
 function bindMap() {
@@ -967,8 +1017,10 @@ function bindControls() {
   document.getElementById('zoom-out').addEventListener('click', function () { zoomAt(VW / 2, VH / 2, 1 / 1.35); });
   document.getElementById('zoom-reset').addEventListener('click', resetView);
   document.getElementById('download').addEventListener('click', downloadSVG);
-  document.getElementById('sidebar-toggle').addEventListener('click', function () {
-    document.body.classList.toggle('sidebar-open');
+  var sideBtn = document.getElementById('sidebar-toggle');
+  sideBtn.addEventListener('click', function () {
+    var open = document.body.classList.toggle('sidebar-open');
+    sideBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
 }
 

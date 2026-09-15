@@ -43,55 +43,76 @@
   #map .labels text { text-anchor: middle; paint-order: stroke; stroke: #ffffff;
                       stroke-width: 3px; stroke-linejoin: round; pointer-events: none;
                       font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
-  #map .lbl-name { fill: #1b2540; font-weight: 700; }
-  #map .lbl-cap { fill: #7a2f1e; font-weight: 600; }
+  #map .lbl-name { fill: #16203a; font-weight: 700; }
+  #map .lbl-cap { fill: #6b2414; font-weight: 600; }
   #map .label-hi .lbl-name { fill: #0b1c3d; }
 </style>
 </head>
 <body>
 
+<a class="skip-link" href="#region-nav">Перейти к списку субъектов</a>
+
 <header class="topbar">
   <div class="brand">
-    <div class="brand-mark">RU</div>
+    <p class="brand-mark" aria-hidden="true">RU</p>
     <div>
       <h1>Карта России</h1>
-      <p>Субъекты федерации, их столицы и крупные реки</p>
+      <p class="brand-sub">Субъекты федерации, их столицы и крупные реки</p>
     </div>
   </div>
-  <div class="search-wrap">
+
+  <search class="search-wrap">
+    <label class="sr-only" for="search">Поиск по карте</label>
     <input id="search" type="text" autocomplete="off" spellcheck="false"
+           role="combobox" aria-expanded="false" aria-controls="search-results"
+           aria-autocomplete="list" aria-describedby="search-hint"
            placeholder="Поиск: субъект, столица или река — «Якутия», «Казань», «Енисей»">
-    <div id="search-results" class="search-dropdown"></div>
-  </div>
-  <button type="button" id="sidebar-toggle" class="ghost-btn">Список субъектов</button>
+    <p id="search-hint" class="sr-only">
+      Введите не меньше двух букв. Варианты перебираются стрелками вверх и вниз,
+      Enter открывает выбранный, Escape закрывает список.
+    </p>
+    <ul id="search-results" class="search-dropdown" role="listbox" aria-label="Результаты поиска"></ul>
+    <p id="search-status" class="sr-only" role="status"></p>
+  </search>
+
+  <button type="button" id="sidebar-toggle" class="ghost-btn" aria-expanded="false" aria-controls="sidebar">
+    Список субъектов
+  </button>
 </header>
 
 <div class="layout">
-  <aside class="sidebar">
-    <div class="controls">
-      <label class="field-label" for="color-by">Заливка</label>
+  <aside class="sidebar" id="sidebar" aria-label="Панель управления и список субъектов">
+    <form class="controls" onsubmit="return false">
+      <p class="field-label" id="color-by-label">Заливка</p>
+      <label class="sr-only" for="color-by">Чем раскрасить субъекты</label>
       <select id="color-by">
         <option value="district">по федеральным округам</option>
         <option value="type">по типу субъекта</option>
       </select>
-      <div class="toggles">
+
+      <fieldset class="toggles">
+        <legend class="sr-only">Что показывать на карте</legend>
         <label><input type="checkbox" id="t-labels" checked> Названия субъектов</label>
         <label><input type="checkbox" id="t-capitals" checked> Столицы</label>
         <label><input type="checkbox" id="t-rivers" checked> Реки</label>
         <label><input type="checkbox" id="t-lakes" checked> Озёра и водохранилища</label>
-        <label><input type="checkbox" id="t-all"> Названия всех субъектов сразу <span class="sub">(мелкие могут накладываться)</span></label>
-      </div>
-    </div>
+        <label><input type="checkbox" id="t-all"> Названия всех субъектов сразу
+          <span class="sub">(мелкие могут накладываться)</span></label>
+      </fieldset>
+    </form>
 
-    <div id="card" class="card">
+    <section id="card" class="card" aria-live="polite" aria-label="Сведения о выбранном субъекте">
       <p class="hint">Выберите субъект на карте или в списке — покажу название, столицу,
       федеральный округ, площадь и население.</p>
-    </div>
+    </section>
 
-    <h2 class="panel-title">Субъекты федерации</h2>
-    <div id="region-list" class="region-list"></div>
+    <nav id="region-nav" aria-label="Субъекты федерации">
+      <h2 class="panel-title">Субъекты федерации</h2>
+      <div id="region-list" class="region-list"></div>
+    </nav>
 
-    <div class="disclaimer">
+    <footer class="disclaimer">
+      <h2 class="panel-title">Источники и оговорки</h2>
       <p><strong>Источники.</strong> Границы, реки и озёра — Natural Earth, масштаб 1:10 млн
       (административные границы <em>ne_10m_admin_1_states_provinces</em>, речная сеть
       <em>ne_10m_rivers_lake_centerlines</em>), общественное достояние. Проекция —
@@ -110,30 +131,42 @@
       <p>Геометрия генерализована для веб-отображения, поэтому на больших увеличениях
       линия границы обобщена и не может использоваться для юридических или
       навигационных целей.</p>
-    </div>
+    </footer>
   </aside>
 
   <main class="stage" id="stage">
-    <svg id="map" role="img" aria-label="Карта России с субъектами федерации, столицами и крупными реками"></svg>
+    <svg id="map" role="img" aria-labelledby="map-title" aria-describedby="map-desc"></svg>
+    <h2 id="map-title" class="sr-only">Карта России: субъекты федерации, столицы и крупные реки</h2>
+    <p id="map-desc" class="sr-only">
+      Карта управляется мышью: колесо меняет масштаб, перетаскивание сдвигает,
+      щелчок выбирает субъект. С клавиатуры то же самое доступно кнопками масштаба
+      и списком субъектов в боковой панели, а клавиши «плюс», «минус» и «ноль»
+      приближают, отдаляют и возвращают вид всей страны.
+    </p>
+    <p id="map-status" class="sr-only" role="status"></p>
 
-    <div id="tip" class="tip"></div>
+    <div id="tip" class="tip" aria-hidden="true"></div>
 
     <div class="map-ui map-ui-top">
-      <div id="legend" class="legend"></div>
+      <h2 class="sr-only">Условные обозначения</h2>
+      <!-- на узком экране легенда прокручивается вбок, поэтому ей нужен
+           собственный фокус: иначе до неё не добраться с клавиатуры -->
+      <ul id="legend" class="legend" tabindex="0" aria-label="Условные обозначения карты"></ul>
     </div>
 
     <div class="map-ui map-ui-bottom">
-      <div class="scale">
-        <div id="scalebar" class="scalebar"><span>1000 км</span></div>
-      </div>
+      <p class="scale">
+        <span class="sr-only">Масштаб: отрезок соответствует</span>
+        <span id="scalebar" class="scalebar"><span>1000 км</span></span>
+      </p>
       <p id="stats" class="stats"></p>
     </div>
 
-    <div class="zoom-ui">
-      <button type="button" id="zoom-in" title="Приблизить">+</button>
-      <button type="button" id="zoom-out" title="Отдалить">−</button>
-      <button type="button" id="zoom-reset" title="Вся страна">⤢</button>
-      <button type="button" id="download" title="Скачать карту в SVG">↓</button>
+    <div class="zoom-ui" role="group" aria-label="Управление картой">
+      <button type="button" id="zoom-in"><span aria-hidden="true">+</span><span class="sr-only">Приблизить</span></button>
+      <button type="button" id="zoom-out"><span aria-hidden="true">−</span><span class="sr-only">Отдалить</span></button>
+      <button type="button" id="zoom-reset"><span aria-hidden="true">⤢</span><span class="sr-only">Показать всю страну</span></button>
+      <button type="button" id="download"><span aria-hidden="true">↓</span><span class="sr-only">Скачать карту в формате SVG</span></button>
     </div>
   </main>
 </div>
