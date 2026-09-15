@@ -675,7 +675,6 @@ function renderCard() {
     '</dl>';
   var rr = riversOf(r);
   if (rr.length) html += '<p class="card-rivers"><span>Крупные реки:</span> ' + rr.join(', ') + '</p>';
-  if (r.note) html += '<p class="card-note">' + r.note + '</p>';
   box.innerHTML = html;
 }
 
