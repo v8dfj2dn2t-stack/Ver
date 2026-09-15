@@ -141,10 +141,6 @@ input, select { font-family: inherit; }
 .legend .lg { display: flex; align-items: center; gap: 6px; }
 .legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 .legend .lg-riv { width: 18px; height: 0; border-top: 3px solid #2f7fb5; border-radius: 0; }
-.legend .lg-hatch {
-  background: repeating-linear-gradient(45deg, #8a8a8a 0 2px, #e6e6e6 2px 5px);
-  border: 1px solid #c4c4c4;
-}
 
 .scale { display: flex; align-items: center; }
 .scalebar {

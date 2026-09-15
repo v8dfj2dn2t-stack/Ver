@@ -40,8 +40,7 @@ var DISTRICTS = [
   ['ПФО', 'Приволжский',       '#9fc487'],
   ['УФО', 'Уральский',         '#c3a5cf'],
   ['СФО', 'Сибирский',         '#e8cd83'],
-  ['ДФО', 'Дальневосточный',   '#8fb3a0'],
-  ['—',   'Спорные территории','#c9c9c9']
+  ['ДФО', 'Дальневосточный',   '#8fb3a0']
 ];
 var DCOLOR = {}, DNAME = {};
 DISTRICTS.forEach(function (d) { DCOLOR[d[0]] = d[2]; DNAME[d[0]] = d[1]; });
@@ -289,7 +288,6 @@ function fillOf(r) {
 
 // ------------------------------------------------------------------ отрисовка
 var svg, gRoot, gLand, gRegions, gLakes, gRivers, gBorders, gLabels, gRiverLabels;
-var hatchPat;
 var tooltip, stage;
 
 function el(tag, attrs) {
@@ -332,47 +330,53 @@ function build() {
     gLakes.appendChild(el('path', { d: l.d, class: 'lake' }));
   });
 
-  var defs = document.getElementById('map-defs') ||
-             (function () { var d = el('defs', { id: 'map-defs' }); svg.appendChild(d); return d; })();
-  riverData.forEach(function (r, i) {
-    var cls = 'river river-o' + r.order;
-    gRivers.appendChild(el('path', { d: r.d, class: cls }));
+  riverData.forEach(function (r) {
+    gRivers.appendChild(el('path', { d: r.d, class: 'river river-o' + r.order }));
     r.labels = [];
     r.lines.forEach(function (line, j) {
       if (r.lens[j] < 12) return;
-      var id = 'rv' + i + '_' + j, idr = id + 'r';
-      var back = line.slice().reverse();
-      defs.appendChild(el('path', { id: id, d: linePath(line) }));
-      defs.appendChild(el('path', { id: idr, d: linePath(back) }));
       var count = Math.max(2, Math.min(60, Math.round(r.lens[j] / 22)));
       for (var q = 0; q < count; q++) {
         var f = (q + 0.5) / count;
         var at = pointAt(line, f);
-        // подпись не должна читаться справа налево: берём ход русла в этой точке
-        var fwd = at[2] > 0 || (at[2] === 0 && at[3] < 0);
-        var t = el('text', { class: 'river-label o' + r.order });
-        var tp = el('textPath', { href: '#' + (fwd ? id : idr),
-                                  startOffset: ((fwd ? f : 1 - f) * 100).toFixed(2) + '%' });
-        tp.setAttribute('xlink:href', '#' + (fwd ? id : idr));
-        tp.textContent = r.name;
-        t.appendChild(tp);
-        gRiverLabels.appendChild(t);
-        r.labels.push({ el: t, at: at, len: r.lens[j] });
+        // текст рисуется прямым и разворачивается по ходу русла: вдоль самой
+        // линии (textPath) на сильном увеличении буквы расползаются по излучине
+        var g = el('g', { class: 'river-label-g' });
+        var inner = el('g', {});
+        var t = el('text', { class: 'river-label o' + r.order, x: 0, y: -2.5 });
+        t.textContent = r.name;
+        inner.appendChild(t);
+        g.appendChild(inner);
+        g.style.display = 'none';
+        gRiverLabels.appendChild(g);
+        r.labels.push({ el: g, inner: inner, at: at, line: line, f: f,
+                        len: r.lens[j], shown: false });
       }
     });
   });
 
-  // спорные территории — штриховка поверх заливки
-  var pat = hatchPat = el('pattern', { id: 'hatch', width: 7, height: 7,
-                            patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' });
-  pat.appendChild(el('rect', { width: 7, height: 7, fill: 'none' }));
-  pat.appendChild(el('line', { x1: 0, y1: 0, x2: 0, y2: 7, stroke: '#8a8a8a', 'stroke-width': 2 }));
-  defs.appendChild(pat);
   regions.forEach(function (r) {
-    if (r.disputed) {
-      gBorders.appendChild(el('path', { d: r.d, class: 'disputed', fill: 'url(#hatch)' }));
-    }
     gBorders.appendChild(el('path', { d: r.d, class: 'region-outline' }));
+  });
+
+  // подписи субъектов: координаты — в системе карты, размер текста — в пикселях
+  // экрана, внутренняя группа только масштабируется под текущий зум
+  regions.forEach(function (r) {
+    var g = el('g', { class: 'label' });
+    g.setAttribute('transform', 'translate(' + r.anchor[0].toFixed(1) + ' ' +
+                                 r.anchor[1].toFixed(1) + ')');
+    var inner = el('g', {});
+    var t1 = el('text', { class: 'lbl-name', x: 0, y: -1.5, 'font-size': NAME_PX });
+    t1.textContent = r.short;
+    var t2 = el('text', { class: 'lbl-cap', x: 0, y: CAP_PX + 1, 'font-size': CAP_PX });
+    t2.textContent = r.capital;
+    inner.appendChild(t1);
+    inner.appendChild(t2);
+    g.appendChild(inner);
+    g.style.display = 'none';
+    gLabels.appendChild(g);
+    r.labelEl = g; r.labelInner = inner; r.nameEl = t1; r.capEl = t2;
+    r.labelShown = false; r.labelHi = false; r.minK = Infinity;
   });
 }
 
@@ -382,110 +386,194 @@ function screenPt(x, y) {
 }
 function textWidth(s, size) { return s.length * size * 0.54; }
 
-function renderLabels() {
-  var rect = svg.getBoundingClientRect();
-  var scale = rect.width / VW;           // внутренние единицы -> пиксели экрана
-  var k = view.k;
-  var boxes = [];
-  var frag = document.createDocumentFragment();
+// --------------------------------------------------------------- подписи
+// Подписи расставляются один раз (layoutLabels) и после этого не двигаются:
+// у каждой запомнен свой масштаб появления minK. При зуме подпись едет вместе
+// со своим регионом или руслом, размер на экране остаётся тем же, а пересчёта
+// раскладки не происходит — поэтому ничего не прыгает и не перестраивается.
+function textWidth(s, size) { return s.length * size * 0.54; }
 
-  function fits(cx, cy, w, h) {
-    var b = [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2];
-    if (b[0] < 2 || b[1] < 2 || b[2] > rect.width - 2 || b[3] > rect.height - 2) return null;
-    for (var i = 0; i < boxes.length; i++) {
-      var o = boxes[i];
-      if (b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]) return null;
+var NAME_PX = 11.5, CAP_PX = 10;          // размеры подписей на экране, px
+function riverPx(order) { return order === 1 ? 11.5 : order === 2 ? 10.5 : 9.5; }
+
+var LEVELS = (function () {
+  var out = [];
+  for (var L = 0.85; L <= 95; L *= 1.28) out.push(L);
+  return out;
+})();
+
+// простая сетка для проверки пересечений: карта режется на клетки по 50 единиц
+function Grid() { this.cells = {}; }
+Grid.prototype.key = function (x, y) { return ((x / 50) | 0) + ':' + ((y / 50) | 0); };
+Grid.prototype.add = function (b) {
+  for (var x = b[0]; x <= b[2] + 50; x += 50) {
+    for (var y = b[1]; y <= b[3] + 50; y += 50) {
+      var k = this.key(x, y);
+      (this.cells[k] || (this.cells[k] = [])).push(b);
     }
-    return b;
   }
-
-  // выбранный и наведённый субъект подписываются всегда, поэтому идут первыми:
-  // остальные подписи уже обходят их, а не наезжают сверху
-  var list = regions.slice().sort(function (a, b) {
-    var pa = (a === selected || a === hovered) ? 1 : 0;
-    var pb = (b === selected || b === hovered) ? 1 : 0;
-    if (pa !== pb) return pa - pb;
-    return a.mainArea - b.mainArea;
-  }).reverse();
-
-  var fs = rect.width < 720 ? 0.82 : 1;     // на узких экранах подписи мельче
-  var ATTEMPTS = [[13 * fs, 11.5 * fs, true], [11 * fs, 9.8 * fs, true],
-                  [11 * fs, 0, false], [9.2 * fs, 0, false]];
-  list.forEach(function (r) {
-    if (!opts.labels && r !== selected && r !== hovered) return;
-    var forced = (r === selected || r === hovered || opts.allLabels);
-
-    // якорь подписи; если он ушёл за край экрана, пробуем видимую часть субъекта
-    var ax = r.anchor[0], ay = r.anchor[1], room = r.anchor[2];
-    var sp = screenPt(ax, ay);
-    var cx = sp[0] * scale, cy = sp[1] * scale;
-    if (cx < 10 || cy < 10 || cx > rect.width - 10 || cy > rect.height - 10) {
-      var mx = Math.min(rect.width - 60, Math.max(60, cx));
-      var my = Math.min(rect.height - 30, Math.max(30, cy));
-      var vx = (mx / scale - view.x) / view.k, vy = (my / scale - view.y) / view.k;
-      if (!pointInRegion(vx, vy, r)) return;
-      ax = vx; ay = vy; cx = mx; cy = my;
-      room = Math.max(room, 12 / (view.k * scale));
+};
+Grid.prototype.hits = function (b) {
+  for (var x = b[0]; x <= b[2] + 50; x += 50) {
+    for (var y = b[1]; y <= b[3] + 50; y += 50) {
+      var list = this.cells[this.key(x, y)];
+      if (!list) continue;
+      for (var i = 0; i < list.length; i++) {
+        var o = list[i];
+        if (b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]) return true;
+      }
     }
+  }
+  return false;
+};
 
-    var showCap, nameSize, capSize, box = null, w = 0, h = 0;
-    for (var ai = 0; ai < ATTEMPTS.length; ai++) {
-      nameSize = ATTEMPTS[ai][0];
-      capSize = ATTEMPTS[ai][1];
-      showCap = ATTEMPTS[ai][2] && opts.capitals && r.capital !== r.short;
-      if (ATTEMPTS[ai][2] && !showCap) continue;      // дубль «только название»
-      w = Math.max(textWidth(r.short, nameSize),
-                   showCap ? textWidth(r.capital, capSize) : 0);
-      h = showCap ? nameSize + capSize + 3 : nameSize;
-      if (!forced && room * view.k * scale < w * 0.14) continue;
-      box = forced ? [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2]
-                   : fits(cx, cy, w + 7, h + 5);
-      if (box) break;
-    }
-    if (!box) return;
-    boxes.push(box);
+// направление русла вокруг точки подписи, усреднённое по отрезку длиной win
+function riverAngle(lb, win) {
+  var total = lineLength(lb.line);
+  var d = Math.min(0.5, (win / 2) / (total || 1));
+  var a = pointAt(lb.line, Math.max(0, lb.f - d));
+  var b = pointAt(lb.line, Math.min(1, lb.f + d));
+  var dx = b[0] - a[0], dy = b[1] - a[1];
+  if (!dx && !dy) { dx = lb.at[2]; dy = lb.at[3]; }
+  var deg = Math.atan2(dy, dx) * 180 / Math.PI;
+  if (deg > 90) deg -= 180;              // подпись не должна читаться вверх ногами
+  if (deg < -90) deg += 180;
+  return deg;
+}
 
-    var px = view.k * scale;                           // внутренние единицы -> px
-    var g = el('g', { class: 'label' + (r === selected || r === hovered ? ' label-hi' : '') });
-    var y0 = ay - (showCap ? (capSize + 3) / 2 / px : 0) + nameSize * 0.34 / px;
-    var t1 = el('text', { x: ax, y: y0, class: 'lbl-name', 'font-size': nameSize / px });
-    t1.textContent = r.short;
-    g.appendChild(t1);
-    if (showCap) {
-      var t2 = el('text', { x: ax, y: y0 + (nameSize + 1) / px, class: 'lbl-cap',
-                            'font-size': capSize / px });
-      t2.textContent = r.capital;
-      g.appendChild(t2);
-    }
-    frag.appendChild(g);
+function layoutLabels() {
+  var rect = svg.getBoundingClientRect();
+  var scale = (rect.width || VW) / VW;       // единицы карты -> px экрана
+  var items = [];
+
+  // субъекты: сначала крупные, подпись всегда считается как «название + столица»,
+  // чтобы включение и выключение столиц не меняло раскладку
+  regions.slice().sort(function (a, b) { return b.mainArea - a.mainArea; })
+    .forEach(function (r) {
+      r.minK = Infinity;
+      items.push({ region: r, x: r.anchor[0], y: r.anchor[1], room: r.anchor[2],
+                   w: Math.max(textWidth(r.short, NAME_PX), textWidth(r.capital, CAP_PX)),
+                   h: NAME_PX + CAP_PX + 3 });
+    });
+
+  // реки: сначала самые крупные; у каждой реки свои точки-кандидаты вдоль русла
+  var rivers = riverData.slice().sort(function (a, b) {
+    return a.order - b.order || (b.length || 0) - (a.length || 0);
+  });
+  rivers.forEach(function (rv) {
+    rv.placed = [];
+    var px = riverPx(rv.order);
+    rv.labels.forEach(function (lb) {
+      lb.minK = Infinity;
+      lb.size = px;
+      lb.el.firstChild.firstChild.setAttribute('font-size', px);
+      var w = textWidth(rv.name, px), h = px;
+      lb.angle = riverAngle(lb, 20);
+      var rad = lb.angle * Math.PI / 180;
+      var ux = Math.abs(Math.cos(rad)), uy = Math.abs(Math.sin(rad));
+      items.push({ river: rv, label: lb, x: lb.at[0], y: lb.at[1],
+                   w: w * ux + h * uy, h: w * uy + h * ux });
+    });
   });
 
-  gLabels.textContent = '';
-  gLabels.appendChild(frag);
-
-  // подписи рек: вдоль русла, но не чаще чем раз в ~420 px и не поверх других подписей
-  riverData.forEach(function (r) {
-    if (!r.labels) return;
-    var size = (r.order === 1 ? 13 : r.order === 2 ? 12 : 10.8) * (rect.width < 720 ? 0.85 : 1);
-    var w = textWidth(r.name, size), placed = [];
-    r.labels.forEach(function (lb) {
-      lb.el.setAttribute('font-size', size / (k * scale));
-      var show = false;
-      if (opts.rivers) {
-        var sp = screenPt(lb.at[0], lb.at[1]);
-        var x = sp[0] * scale, y = sp[1] * scale;
-        var lenPx = lb.len * k * scale;
-        var m = w / 2 + 14;
-        var onScreen = x > m && y > m && x < rect.width - m && y < rect.height - m;
-        var big = r.order <= 2 || k > 2.2 || lenPx > 700;
-        if (onScreen && big && lenPx > w * 1.6 + 30) {
-          var far = placed.every(function (q) { return Math.hypot(q[0] - x, q[1] - y) > 420; });
-          var box = far ? fits(x, y, w + 10, size + 6) : null;
-          if (box) { boxes.push(box); placed.push([x, y]); show = true; }
+  var rest = items;
+  for (var li = 0; li < LEVELS.length; li++) {
+    var L = LEVELS[li];
+    var u = 1 / (L * scale);                 // px -> единицы карты на этом масштабе
+    var grid = new Grid();
+    var i, it;
+    // уже расставленные подписи на этом масштабе занимают меньше места
+    for (i = 0; i < items.length; i++) {
+      it = items[i];
+      if (it.done) grid.add(box(it, u));
+    }
+    var next = [];
+    for (i = 0; i < rest.length; i++) {
+      it = rest[i];
+      if (it.done) continue;
+      var b = box(it, u);
+      if (it.region) {
+        // подпись должна помещаться внутри своего субъекта
+        if (b[2] - b[0] > it.room * 7 || b[3] - b[1] > it.room * 4.5) { next.push(it); continue; }
+      } else {
+        // две подписи одной реки не должны стоять ближе ~360 px друг к другу
+        var sep = 360 * u, tooClose = false;
+        for (var q = 0; q < it.river.placed.length; q++) {
+          var p = it.river.placed[q];
+          if (Math.hypot(p[0] - it.x, p[1] - it.y) < sep) { tooClose = true; break; }
         }
+        if (tooClose) { next.push(it); continue; }
       }
-      lb.el.style.display = show ? '' : 'none';
+      if (grid.hits(b)) { next.push(it); continue; }
+      grid.add(b);
+      it.done = true;
+      if (it.region) it.region.minK = L;
+      else { it.label.minK = L; it.river.placed.push([it.x, it.y]); }
+    }
+    rest = next;
+  }
+
+  // теперь известно, на каком масштабе появится каждая подпись реки, — значит,
+  // известна и длина участка, который она закрывает: по нему и берём направление
+  riverData.forEach(function (rv) {
+    rv.labels.forEach(function (lb) {
+      if (lb.minK === Infinity) return;
+      var span = textWidth(rv.name, lb.size) / (lb.minK * scale);
+      lb.angle = riverAngle(lb, Math.max(8, Math.min(220, span)));
+      lb.el.setAttribute('transform', 'translate(' + lb.at[0].toFixed(1) + ' ' +
+        lb.at[1].toFixed(1) + ') rotate(' + lb.angle.toFixed(1) + ')');
     });
+  });
+
+  function box(it, u) {
+    var hw = it.w * u / 2 + 1.5 * u, hh = it.h * u / 2 + 1.5 * u;
+    return [it.x - hw, it.y - hh, it.x + hw, it.y + hh];
+  }
+  updateLabels();
+}
+
+// каждый кадр меняется только масштаб текста и видимость — координаты фиксированы
+function updateLabels() {
+  var rect = svg.getBoundingClientRect();
+  var scale = (rect.width || VW) / VW;
+  var u = 1 / (view.k * scale);              // px -> единицы карты
+  var us = u.toFixed(4);
+
+  regions.forEach(function (r) {
+    if (!r.labelEl) return;
+    var hi = (r === selected || r === hovered);
+    var show = opts.labels && (opts.allLabels || hi || view.k >= r.minK);
+    if (show !== r.labelShown) {
+      r.labelEl.style.display = show ? '' : 'none';
+      r.labelShown = show;
+    }
+    if (show) {
+      r.labelInner.setAttribute('transform', 'scale(' + us + ')');
+      if (hi !== r.labelHi) {
+        r.labelEl.classList.toggle('label-hi', hi);
+        r.labelHi = hi;
+      }
+    }
+  });
+
+  riverData.forEach(function (rv) {
+    rv.labels.forEach(function (lb) {
+      var show = opts.rivers && view.k >= lb.minK;
+      if (show !== lb.shown) {
+        lb.el.style.display = show ? '' : 'none';
+        lb.shown = show;
+      }
+      if (show) lb.inner.setAttribute('transform', 'scale(' + us + ')');
+    });
+  });
+}
+
+// столицы можно выключить: подпись остаётся на месте, исчезает только вторая строка
+function applyCapitalLines() {
+  regions.forEach(function (r) {
+    if (!r.capEl) return;
+    r.capEl.style.display = opts.capitals ? '' : 'none';
+    r.nameEl.setAttribute('y', opts.capitals ? -1.5 : NAME_PX * 0.36);
   });
 }
 
@@ -494,19 +582,13 @@ function applyView() {
   gRoot.setAttribute('transform',
     'translate(' + view.x.toFixed(2) + ' ' + view.y.toFixed(2) + ') scale(' + view.k.toFixed(4) + ')');
   gRoot.style.setProperty('--k', view.k);
-  // штриховка спорных территорий живёт в координатах карты, поэтому при зуме
-  // её шаг приходится уменьшать вручную — иначе полосы разъезжаются
-  if (hatchPat) {
-    hatchPat.setAttribute('patternTransform',
-      'rotate(45) scale(' + (1 / view.k).toFixed(4) + ')');
-  }
   scheduleLabels();
   updateScaleBar();
 }
 var labelTimer = null;
 function scheduleLabels() {
   if (labelTimer) cancelAnimationFrame(labelTimer);
-  labelTimer = requestAnimationFrame(function () { labelTimer = null; renderLabels(); });
+  labelTimer = requestAnimationFrame(function () { labelTimer = null; updateLabels(); });
 }
 function clampView() {
   var minK = 0.85, maxK = 90;
@@ -576,7 +658,7 @@ function renderCard() {
   var dens = (r.pop / r.area).toFixed(r.pop / r.area < 10 ? 2 : 1);
   var html = '<h3>' + r.name + '</h3>' +
     '<p class="card-type">' + r.type +
-      (r.district !== '—' ? ' · ' + DNAME[r.district] + ' федеральный округ' : '') + '</p>' +
+      ' · ' + DNAME[r.district] + ' федеральный округ</p>' +
     '<dl>' +
       '<dt>Столица</dt><dd><b>' + r.capital + '</b></dd>' +
       '<dt>Код</dt><dd>' + r.code + '</dd>' +
@@ -624,7 +706,7 @@ function buildSidebar() {
     if (!list.length) return;
     list.sort(function (a, b) { return a.name.localeCompare(b.name, 'ru'); });
     html += '<div class="dist"><h4><i style="background:' + d[2] + '"></i>' +
-            (d[0] === '—' ? 'Спорные территории' : d[1] + ' ФО') +
+            d[1] + ' ФО' +
             '<span>' + list.length + '</span></h4>';
     list.forEach(function (r) {
       html += '<button type="button" class="reg-item" data-code="' + r.code + '">' +
@@ -647,15 +729,14 @@ function buildLegend() {
     if (opts.colorBy === 'district') {
       DISTRICTS.forEach(function (d) {
         html += '<span class="lg"><i style="background:' + d[2] + '"></i>' +
-                (d[0] === '—' ? 'Спорные' : d[1]) + '</span>';
+                d[1] + '</span>';
       });
     } else {
       TYPES.forEach(function (t) {
         html += '<span class="lg"><i style="background:' + t[1] + '"></i>' + t[0] + '</span>';
       });
     }
-    html += '<span class="lg"><i class="lg-riv"></i>Крупные реки</span>' +
-            '<span class="lg"><i class="lg-hatch"></i>Спорная территория</span>';
+    html += '<span class="lg"><i class="lg-riv"></i>Крупные реки</span>';
     wrap.innerHTML = html;
   }
   paint();
@@ -827,7 +908,13 @@ function bindMap() {
             (e.touches[0].clientY + e.touches[1].clientY) / 2];
   }
 
-  window.addEventListener('resize', scheduleLabels);
+  var resizeTimer = null;
+  window.addEventListener('resize', function () {
+    // раскладка зависит от размера окна, поэтому пересчитываем её при ресайзе,
+    // но не чаще одного раза в 200 мс
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(layoutLabels, 200);
+  });
   window.addEventListener('keydown', function (e) {
     if (e.target.tagName === 'INPUT') return;
     if (e.key === '+' || e.key === '=') zoomAt(VW / 2, VH / 2, 1.3);
@@ -866,7 +953,7 @@ function bindControls() {
     gRiverLabels.style.display = opts.rivers ? '' : 'none';
   });
   toggle('t-labels', 'labels');
-  toggle('t-capitals', 'capitals');
+  toggle('t-capitals', 'capitals', applyCapitalLines);
   toggle('t-all', 'allLabels');
   toggle('t-lakes', 'lakes', function () {
     gLakes.style.display = opts.lakes ? '' : 'none';
@@ -905,11 +992,9 @@ function downloadSVG() {
 }
 
 function stats() {
-  var n = regions.filter(function (r) { return !r.disputed; }).length;
-  var d = regions.length - n;
   document.getElementById('stats').textContent =
-    n + ' субъекта федерации + ' + d + ' спорных территорий · ' +
-    riverData.length + ' рек · ' + geo.lakes.length + ' озёр и водохранилищ';
+    regions.length + ' регионов · ' + riverData.length + ' рек · ' +
+    geo.lakes.length + ' озёр и водохранилищ';
 }
 
 function init() {
@@ -920,7 +1005,9 @@ function init() {
   bindMap();
   bindControls();
   stats();
+  applyCapitalLines();
   applyView();
+  layoutLabels();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
