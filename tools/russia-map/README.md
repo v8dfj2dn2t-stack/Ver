@@ -1,12 +1,12 @@
-# Данные для карты России (`russia.html`)
+# Данные для карты России (`russia/index.html`)
 
-Три файла в `js/` собраны скриптами из этой папки:
+Три файла в `russia/js/` собраны скриптами из этой папки:
 
 | файл | что внутри | скрипт |
 |---|---|---|
-| `js/russia-geo.js` | границы 85 субъектов, суша соседних стран, озёра и водохранилища | `geo.py` |
-| `js/russia-regions.js` | названия, типы, столицы с координатами, округа, площадь и население | `regions.py` |
-| `js/russia-rivers.js` | русла крупных рек с русскими названиями и длинами | `rivers.py` |
+| `russia/js/geo.js` | границы 85 субъектов, суша соседних стран, озёра и водохранилища | `geo.py` |
+| `russia/js/regions.js` | названия, типы, столицы с координатами, округа, площадь и население | `regions.py` |
+| `russia/js/rivers.js` | русла крупных рек с русскими названиями и длинами | `rivers.py` |
 
 ## Как пересобрать
 
@@ -32,7 +32,10 @@ mapshaper ne10_admin1.geojson \
   -o precision=0.001 format=geojson ru_regions_40.json
 
 python3 ../geo.py && python3 ../regions.py && python3 ../rivers.py
-cp russia-geo.js russia-regions.js russia-rivers.js ../../../js/
+# положить как russia/js/geo.js, russia/js/regions.js, russia/js/rivers.js
+cp russia-geo.js ../../../russia/js/geo.js
+cp russia-regions.js ../../../russia/js/regions.js
+cp russia-rivers.js ../../../russia/js/rivers.js
 ```
 
 `rivers.py` сам прореживает точки (алгоритм Дугласа — Пекера), поэтому файл рек
