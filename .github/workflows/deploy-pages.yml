@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [claude/mgimo-interactive-map-9xw6vz, claude/russia-map-regions-rivers-hqtwco]
+    branches: [claude/mgimo-interactive-map-9xw6vz]
   workflow_dispatch:
 
 permissions:
