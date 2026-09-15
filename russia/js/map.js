@@ -84,7 +84,7 @@ function prepare() {
     var r = {
       code: m.code, name: m.name, short: m.short, type: m.type,
       capital: m.capital, district: m.district, area: m.area, pop: m.pop,
-      note: m.note, disputed: !!m.disputed, idx: i, polys: polys,
+      idx: i, polys: polys,
       d: polys.map(ringPath).join(''),
       bbox: polyBBox(polys)
     };
