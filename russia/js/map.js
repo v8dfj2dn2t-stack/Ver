@@ -41,7 +41,7 @@ var DISTRICTS = [
   ['УФО', 'Уральский',         '#c3a5cf'],
   ['СФО', 'Сибирский',         '#e8cd83'],
   ['ДФО', 'Дальневосточный',   '#8fb3a0'],
-  ['—',   'Спорная территория','#c9c9c9']
+  ['—',   'Спорные территории','#c9c9c9']
 ];
 var DCOLOR = {}, DNAME = {};
 DISTRICTS.forEach(function (d) { DCOLOR[d[0]] = d[2]; DNAME[d[0]] = d[1]; });
@@ -49,7 +49,7 @@ DISTRICTS.forEach(function (d) { DCOLOR[d[0]] = d[2]; DNAME[d[0]] = d[1]; });
 var TYPES = [
   ['Республика', '#8fbf9f'], ['Край', '#e3b880'], ['Область', '#8fb0d8'],
   ['Город федерального значения', '#d98f8f'], ['Автономная область', '#c6a9d6'],
-  ['Автономный округ', '#a8cfd6'], ['Спорная территория', '#c9c9c9']
+  ['Автономный округ', '#a8cfd6']
 ];
 var TCOLOR = {};
 TYPES.forEach(function (t) { TCOLOR[t[0]] = t[1]; });
@@ -85,8 +85,7 @@ function prepare() {
     var r = {
       code: m.code, name: m.name, short: m.short, type: m.type,
       capital: m.capital, district: m.district, area: m.area, pop: m.pop,
-      note: m.note, idx: i, polys: polys,
-      capitalXY: m.capitalLL ? toView(project(m.capitalLL[0], m.capitalLL[1])) : null,
+      note: m.note, disputed: !!m.disputed, idx: i, polys: polys,
       d: polys.map(ringPath).join(''),
       bbox: polyBBox(polys)
     };
@@ -290,6 +289,7 @@ function fillOf(r) {
 
 // ------------------------------------------------------------------ отрисовка
 var svg, gRoot, gLand, gRegions, gLakes, gRivers, gBorders, gLabels, gRiverLabels;
+var hatchPat;
 var tooltip, stage;
 
 function el(tag, attrs) {
@@ -363,13 +363,13 @@ function build() {
   });
 
   // спорные территории — штриховка поверх заливки
-  var pat = el('pattern', { id: 'hatch', width: 7, height: 7,
+  var pat = hatchPat = el('pattern', { id: 'hatch', width: 7, height: 7,
                             patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' });
   pat.appendChild(el('rect', { width: 7, height: 7, fill: 'none' }));
   pat.appendChild(el('line', { x1: 0, y1: 0, x2: 0, y2: 7, stroke: '#8a8a8a', 'stroke-width': 2 }));
   defs.appendChild(pat);
   regions.forEach(function (r) {
-    if (r.district === '—') {
+    if (r.disputed) {
       gBorders.appendChild(el('path', { d: r.d, class: 'disputed', fill: 'url(#hatch)' }));
     }
     gBorders.appendChild(el('path', { d: r.d, class: 'region-outline' }));
@@ -399,9 +399,12 @@ function renderLabels() {
     return b;
   }
 
+  // выбранный и наведённый субъект подписываются всегда, поэтому идут первыми:
+  // остальные подписи уже обходят их, а не наезжают сверху
   var list = regions.slice().sort(function (a, b) {
-    if (a === selected) return 1;
-    if (b === selected) return -1;
+    var pa = (a === selected || a === hovered) ? 1 : 0;
+    var pb = (b === selected || b === hovered) ? 1 : 0;
+    if (pa !== pb) return pa - pb;
     return a.mainArea - b.mainArea;
   }).reverse();
 
@@ -432,7 +435,7 @@ function renderLabels() {
       showCap = ATTEMPTS[ai][2] && opts.capitals && r.capital !== r.short;
       if (ATTEMPTS[ai][2] && !showCap) continue;      // дубль «только название»
       w = Math.max(textWidth(r.short, nameSize),
-                   showCap ? textWidth('● ' + r.capital, capSize) : 0);
+                   showCap ? textWidth(r.capital, capSize) : 0);
       h = showCap ? nameSize + capSize + 3 : nameSize;
       if (!forced && room * view.k * scale < w * 0.14) continue;
       box = forced ? [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2]
@@ -451,28 +454,11 @@ function renderLabels() {
     if (showCap) {
       var t2 = el('text', { x: ax, y: y0 + (nameSize + 1) / px, class: 'lbl-cap',
                             'font-size': capSize / px });
-      t2.textContent = '● ' + r.capital;
+      t2.textContent = r.capital;
       g.appendChild(t2);
     }
     frag.appendChild(g);
   });
-
-  // столицы — точки и подписи у самой точки, если хватает места
-  if (opts.capitals) {
-    var caps = regions.slice().sort(function (a, b) { return b.pop - a.pop; });
-    caps.forEach(function (r) {
-      if (!r.capitalXY) return;
-      var sp = screenPt(r.capitalXY[0], r.capitalXY[1]);
-      var cx = sp[0] * scale, cy = sp[1] * scale;
-      if (cx < -20 || cy < -20 || cx > rect.width + 20 || cy > rect.height + 20) return;
-      var g = el('g', { class: 'capital' + (r === selected ? ' capital-hi' : '') });
-      var star = r.capital === 'Москва';
-      g.appendChild(el('circle', { cx: r.capitalXY[0], cy: r.capitalXY[1],
-                                   r: (star ? 4.6 : 3.1) / (k * scale),
-                                   class: star ? 'cap-dot cap-main' : 'cap-dot' }));
-      frag.appendChild(g);
-    });
-  }
 
   gLabels.textContent = '';
   gLabels.appendChild(frag);
@@ -508,6 +494,12 @@ function applyView() {
   gRoot.setAttribute('transform',
     'translate(' + view.x.toFixed(2) + ' ' + view.y.toFixed(2) + ') scale(' + view.k.toFixed(4) + ')');
   gRoot.style.setProperty('--k', view.k);
+  // штриховка спорных территорий живёт в координатах карты, поэтому при зуме
+  // её шаг приходится уменьшать вручную — иначе полосы разъезжаются
+  if (hatchPat) {
+    hatchPat.setAttribute('patternTransform',
+      'rotate(45) scale(' + (1 / view.k).toFixed(4) + ')');
+  }
   scheduleLabels();
   updateScaleBar();
 }
@@ -632,7 +624,7 @@ function buildSidebar() {
     if (!list.length) return;
     list.sort(function (a, b) { return a.name.localeCompare(b.name, 'ru'); });
     html += '<div class="dist"><h4><i style="background:' + d[2] + '"></i>' +
-            (d[0] === '—' ? 'Спорная территория' : d[1] + ' ФО') +
+            (d[0] === '—' ? 'Спорные территории' : d[1] + ' ФО') +
             '<span>' + list.length + '</span></h4>';
     list.forEach(function (r) {
       html += '<button type="button" class="reg-item" data-code="' + r.code + '">' +
@@ -655,7 +647,7 @@ function buildLegend() {
     if (opts.colorBy === 'district') {
       DISTRICTS.forEach(function (d) {
         html += '<span class="lg"><i style="background:' + d[2] + '"></i>' +
-                (d[0] === '—' ? 'Спорная' : d[1]) + '</span>';
+                (d[0] === '—' ? 'Спорные' : d[1]) + '</span>';
       });
     } else {
       TYPES.forEach(function (t) {
@@ -663,7 +655,7 @@ function buildLegend() {
       });
     }
     html += '<span class="lg"><i class="lg-riv"></i>Крупные реки</span>' +
-            '<span class="lg"><i class="lg-cap"></i>Столица субъекта</span>';
+            '<span class="lg"><i class="lg-hatch"></i>Спорная территория</span>';
     wrap.innerHTML = html;
   }
   paint();
@@ -913,10 +905,11 @@ function downloadSVG() {
 }
 
 function stats() {
-  var n = regions.filter(function (r) { return r.district !== '—'; }).length;
+  var n = regions.filter(function (r) { return !r.disputed; }).length;
+  var d = regions.length - n;
   document.getElementById('stats').textContent =
-    n + ' субъекта федерации · ' + riverData.length + ' рек · ' +
-    geo.lakes.length + ' озёр и водохранилищ';
+    n + ' субъекта федерации + ' + d + ' спорных территорий · ' +
+    riverData.length + ' рек · ' + geo.lakes.length + ' озёр и водохранилищ';
 }
 
 function init() {

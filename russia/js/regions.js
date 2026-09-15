@@ -12,7 +12,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 27134,
 "pop": 1540486,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-BRY",
@@ -27,7 +28,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 34857,
 "pop": 1169161,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-VLA",
@@ -42,7 +44,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 29084,
 "pop": 1348134,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-VOR",
@@ -57,7 +60,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 52216,
 "pop": 2308792,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-IVA",
@@ -72,7 +76,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 21437,
 "pop": 927828,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KLU",
@@ -87,7 +92,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 29777,
 "pop": 1069904,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KOS",
@@ -102,7 +108,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 60211,
 "pop": 580976,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KRS",
@@ -117,7 +124,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 29997,
 "pop": 1082458,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-LIP",
@@ -132,7 +140,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 24047,
 "pop": 1114384,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-MOW",
@@ -147,7 +156,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 44329,
 "pop": 8524665,
-"note": "Административный центр — Красногорск; часть органов власти работает в Москве."
+"note": "Административный центр — Красногорск; часть органов власти работает в Москве.",
+"disputed": false
 },
 {
 "code": "RU-ORL",
@@ -162,7 +172,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 24652,
 "pop": 713374,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-RYA",
@@ -177,7 +188,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 39605,
 "pop": 1073771,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-SMO",
@@ -192,7 +204,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 49778,
 "pop": 888247,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-TAM",
@@ -207,7 +220,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 34462,
 "pop": 979762,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-TVE",
@@ -222,7 +236,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 84201,
 "pop": 1245619,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-TUL",
@@ -237,7 +252,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 25679,
 "pop": 1512680,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-YAR",
@@ -252,7 +268,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 36177,
 "pop": 1201935,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-MOS",
@@ -267,7 +284,8 @@ window.RU_REGIONS = [
 "district": "ЦФО",
 "area": 2561,
 "pop": 13010112,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KR",
@@ -282,7 +300,8 @@ window.RU_REGIONS = [
 "district": "СЗФО",
 "area": 180520,
 "pop": 533121,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KO",
@@ -297,7 +316,8 @@ window.RU_REGIONS = [
 "district": "СЗФО",
 "area": 416774,
 "pop": 737853,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-ARK",
@@ -312,7 +332,8 @@ window.RU_REGIONS = [
 "district": "СЗФО",
 "area": 413103,
 "pop": 1006603,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-NEN",
@@ -327,7 +348,8 @@ window.RU_REGIONS = [
 "district": "СЗФО",
 "area": 176810,
 "pop": 41434,
-"note": "Входит в состав Архангельской области."
+"note": "Входит в состав Архангельской области.",
+"disputed": false
 },
 {
 "code": "RU-VLG",
@@ -342,7 +364,8 @@ window.RU_REGIONS = [
 "district": "СЗФО",
 "area": 144527,
 "pop": 1139801,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KGD",
@@ -357,7 +380,8 @@ window.RU_REGIONS = [
 "district": "СЗФО",
 "area": 15125,
 "pop": 1029966,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-LEN",
@@ -372,7 +396,8 @@ window.RU_REGIONS = [
 "district": "СЗФО",
 "area": 83908,
 "pop": 2000997,
-"note": "Административный центр — Санкт-Петербург; сам город в состав области не входит."
+"note": "Административный центр — Санкт-Петербург; сам город в состав области не входит.",
+"disputed": false
 },
 {
 "code": "RU-MUR",
@@ -387,7 +412,8 @@ window.RU_REGIONS = [
 "district": "СЗФО",
 "area": 144902,
 "pop": 667744,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-NGR",
@@ -402,7 +428,8 @@ window.RU_REGIONS = [
 "district": "СЗФО",
 "area": 54501,
 "pop": 583387,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-PSK",
@@ -417,7 +444,8 @@ window.RU_REGIONS = [
 "district": "СЗФО",
 "area": 55399,
 "pop": 599084,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-SPE",
@@ -432,7 +460,8 @@ window.RU_REGIONS = [
 "district": "СЗФО",
 "area": 1439,
 "pop": 5601911,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-AD",
@@ -447,7 +476,8 @@ window.RU_REGIONS = [
 "district": "ЮФО",
 "area": 7792,
 "pop": 496934,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KL",
@@ -462,7 +492,8 @@ window.RU_REGIONS = [
 "district": "ЮФО",
 "area": 74731,
 "pop": 270777,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KDA",
@@ -477,7 +508,8 @@ window.RU_REGIONS = [
 "district": "ЮФО",
 "area": 75485,
 "pop": 5838273,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-AST",
@@ -492,7 +524,8 @@ window.RU_REGIONS = [
 "district": "ЮФО",
 "area": 49024,
 "pop": 1005782,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-VGG",
@@ -507,7 +540,8 @@ window.RU_REGIONS = [
 "district": "ЮФО",
 "area": 112877,
 "pop": 2500781,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-ROS",
@@ -522,7 +556,8 @@ window.RU_REGIONS = [
 "district": "ЮФО",
 "area": 100967,
 "pop": 4200729,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-DA",
@@ -537,7 +572,8 @@ window.RU_REGIONS = [
 "district": "СКФО",
 "area": 50270,
 "pop": 3182054,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-IN",
@@ -552,7 +588,8 @@ window.RU_REGIONS = [
 "district": "СКФО",
 "area": 3628,
 "pop": 509541,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KB",
@@ -567,7 +604,8 @@ window.RU_REGIONS = [
 "district": "СКФО",
 "area": 12470,
 "pop": 904200,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KC",
@@ -582,7 +620,8 @@ window.RU_REGIONS = [
 "district": "СКФО",
 "area": 14277,
 "pop": 469865,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-SE",
@@ -597,7 +636,8 @@ window.RU_REGIONS = [
 "district": "СКФО",
 "area": 7987,
 "pop": 687357,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-CE",
@@ -612,7 +652,8 @@ window.RU_REGIONS = [
 "district": "СКФО",
 "area": 16165,
 "pop": 1510824,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-STA",
@@ -627,7 +668,8 @@ window.RU_REGIONS = [
 "district": "СКФО",
 "area": 66160,
 "pop": 2907593,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-BA",
@@ -642,7 +684,8 @@ window.RU_REGIONS = [
 "district": "ПФО",
 "area": 142947,
 "pop": 4091423,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-ME",
@@ -657,7 +700,8 @@ window.RU_REGIONS = [
 "district": "ПФО",
 "area": 23375,
 "pop": 679094,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-MO",
@@ -672,7 +716,8 @@ window.RU_REGIONS = [
 "district": "ПФО",
 "area": 26128,
 "pop": 795502,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-TA",
@@ -687,7 +732,8 @@ window.RU_REGIONS = [
 "district": "ПФО",
 "area": 67847,
 "pop": 4004809,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-UD",
@@ -702,7 +748,8 @@ window.RU_REGIONS = [
 "district": "ПФО",
 "area": 42061,
 "pop": 1452914,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-CU",
@@ -717,7 +764,8 @@ window.RU_REGIONS = [
 "district": "ПФО",
 "area": 18343,
 "pop": 1201646,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-PER",
@@ -732,7 +780,8 @@ window.RU_REGIONS = [
 "district": "ПФО",
 "area": 160236,
 "pop": 2532405,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KIR",
@@ -747,7 +796,8 @@ window.RU_REGIONS = [
 "district": "ПФО",
 "area": 120374,
 "pop": 1153680,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-NIZ",
@@ -762,7 +812,8 @@ window.RU_REGIONS = [
 "district": "ПФО",
 "area": 76624,
 "pop": 3119115,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-ORE",
@@ -777,7 +828,8 @@ window.RU_REGIONS = [
 "district": "ПФО",
 "area": 123702,
 "pop": 1862767,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-PNZ",
@@ -792,7 +844,8 @@ window.RU_REGIONS = [
 "district": "ПФО",
 "area": 43352,
 "pop": 1275551,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-SAM",
@@ -807,7 +860,8 @@ window.RU_REGIONS = [
 "district": "ПФО",
 "area": 53565,
 "pop": 3172925,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-SAR",
@@ -822,7 +876,8 @@ window.RU_REGIONS = [
 "district": "ПФО",
 "area": 101240,
 "pop": 2442905,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-ULY",
@@ -837,7 +892,8 @@ window.RU_REGIONS = [
 "district": "ПФО",
 "area": 37181,
 "pop": 1194837,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KGN",
@@ -852,7 +908,8 @@ window.RU_REGIONS = [
 "district": "УФО",
 "area": 71488,
 "pop": 776661,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-SVE",
@@ -867,7 +924,8 @@ window.RU_REGIONS = [
 "district": "УФО",
 "area": 194307,
 "pop": 4268998,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-TYU",
@@ -882,7 +940,8 @@ window.RU_REGIONS = [
 "district": "УФО",
 "area": 160122,
 "pop": 1600493,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KHM",
@@ -897,7 +956,8 @@ window.RU_REGIONS = [
 "district": "УФО",
 "area": 534801,
 "pop": 1711480,
-"note": "Входит в состав Тюменской области."
+"note": "Входит в состав Тюменской области.",
+"disputed": false
 },
 {
 "code": "RU-YAN",
@@ -912,7 +972,8 @@ window.RU_REGIONS = [
 "district": "УФО",
 "area": 769250,
 "pop": 510490,
-"note": "Входит в состав Тюменской области."
+"note": "Входит в состав Тюменской области.",
+"disputed": false
 },
 {
 "code": "RU-CHE",
@@ -927,7 +988,8 @@ window.RU_REGIONS = [
 "district": "УФО",
 "area": 88529,
 "pop": 3431224,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-AL",
@@ -942,7 +1004,8 @@ window.RU_REGIONS = [
 "district": "СФО",
 "area": 92903,
 "pop": 210924,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-TY",
@@ -957,7 +1020,8 @@ window.RU_REGIONS = [
 "district": "СФО",
 "area": 168604,
 "pop": 336651,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KK",
@@ -972,7 +1036,8 @@ window.RU_REGIONS = [
 "district": "СФО",
 "area": 61569,
 "pop": 534262,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-ALT",
@@ -987,7 +1052,8 @@ window.RU_REGIONS = [
 "district": "СФО",
 "area": 167996,
 "pop": 2163693,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KYA",
@@ -1002,7 +1068,8 @@ window.RU_REGIONS = [
 "district": "СФО",
 "area": 2366797,
 "pop": 2856971,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-IRK",
@@ -1017,7 +1084,8 @@ window.RU_REGIONS = [
 "district": "СФО",
 "area": 774846,
 "pop": 2370102,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KEM",
@@ -1032,7 +1100,8 @@ window.RU_REGIONS = [
 "district": "СФО",
 "area": 95725,
 "pop": 2600923,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-NVS",
@@ -1047,7 +1116,8 @@ window.RU_REGIONS = [
 "district": "СФО",
 "area": 177756,
 "pop": 2797176,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-OMS",
@@ -1062,7 +1132,8 @@ window.RU_REGIONS = [
 "district": "СФО",
 "area": 141140,
 "pop": 1858798,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-TOM",
@@ -1077,7 +1148,8 @@ window.RU_REGIONS = [
 "district": "СФО",
 "area": 314391,
 "pop": 1055259,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-BU",
@@ -1092,7 +1164,8 @@ window.RU_REGIONS = [
 "district": "ДФО",
 "area": 351334,
 "pop": 978588,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-SA",
@@ -1107,7 +1180,8 @@ window.RU_REGIONS = [
 "district": "ДФО",
 "area": 3083523,
 "pop": 995686,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-ZAB",
@@ -1122,7 +1196,8 @@ window.RU_REGIONS = [
 "district": "ДФО",
 "area": 431892,
 "pop": 1004125,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KAM",
@@ -1137,7 +1212,8 @@ window.RU_REGIONS = [
 "district": "ДФО",
 "area": 464275,
 "pop": 291705,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-PRI",
@@ -1152,7 +1228,8 @@ window.RU_REGIONS = [
 "district": "ДФО",
 "area": 164673,
 "pop": 1845165,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-KHA",
@@ -1167,7 +1244,8 @@ window.RU_REGIONS = [
 "district": "ДФО",
 "area": 787633,
 "pop": 1298978,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-AMU",
@@ -1182,7 +1260,8 @@ window.RU_REGIONS = [
 "district": "ДФО",
 "area": 361908,
 "pop": 766912,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-MAG",
@@ -1197,7 +1276,8 @@ window.RU_REGIONS = [
 "district": "ДФО",
 "area": 462464,
 "pop": 136085,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-SAK",
@@ -1212,7 +1292,8 @@ window.RU_REGIONS = [
 "district": "ДФО",
 "area": 87101,
 "pop": 466609,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-YEV",
@@ -1227,7 +1308,8 @@ window.RU_REGIONS = [
 "district": "ДФО",
 "area": 36266,
 "pop": 150453,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "RU-CHU",
@@ -1242,13 +1324,14 @@ window.RU_REGIONS = [
 "district": "ДФО",
 "area": 721481,
 "pop": 47490,
-"note": null
+"note": null,
+"disputed": false
 },
 {
 "code": "UA-43",
 "name": "Республика Крым",
 "short": "Крым",
-"type": "Спорная территория",
+"type": "Республика",
 "capital": "Симферополь",
 "capitalLL": [
 34.0987,
@@ -1257,13 +1340,14 @@ window.RU_REGIONS = [
 "district": "—",
 "area": 26081,
 "pop": 1934630,
-"note": "С 2014 года под управлением России; международно признана частью Украины."
+"note": "Присоединён Россией в 2014 году; международно признан частью Украины. По российскому законодательству входит в Южный федеральный округ.",
+"disputed": true
 },
 {
 "code": "UA-40",
 "name": "Севастополь",
 "short": "Севастополь",
-"type": "Спорная территория",
+"type": "Город федерального значения",
 "capital": "Севастополь",
 "capitalLL": [
 33.5244,
@@ -1272,6 +1356,71 @@ window.RU_REGIONS = [
 "district": "—",
 "area": 864,
 "pop": 547820,
-"note": "С 2014 года под управлением России; международно признан частью Украины."
+"note": "Присоединён Россией в 2014 году; международно признан частью Украины. По российскому законодательству входит в Южный федеральный округ.",
+"disputed": true
+},
+{
+"code": "UA-09",
+"name": "Луганская Народная Республика",
+"short": "ЛНР",
+"type": "Республика",
+"capital": "Луганск",
+"capitalLL": [
+39.3078,
+48.574
+],
+"district": "—",
+"area": 26684,
+"pop": 2102000,
+"note": "Присоединена Россией в сентябре 2022 года; международно признана частью Украины, контролируется не полностью. Площадь и население — довоенные данные по области (оценка на 2022 год), а не перепись.",
+"disputed": true
+},
+{
+"code": "UA-14",
+"name": "Донецкая Народная Республика",
+"short": "ДНР",
+"type": "Республика",
+"capital": "Донецк",
+"capitalLL": [
+37.8028,
+48.0159
+],
+"district": "—",
+"area": 26517,
+"pop": 4059000,
+"note": "Присоединена Россией в сентябре 2022 года; международно признана частью Украины, контролируется не полностью. Площадь и население — довоенные данные по области (оценка на 2022 год), а не перепись.",
+"disputed": true
+},
+{
+"code": "UA-23",
+"name": "Запорожская область",
+"short": "Запорожская обл.",
+"type": "Область",
+"capital": "Запорожье",
+"capitalLL": [
+35.1396,
+47.8388
+],
+"district": "—",
+"area": 27180,
+"pop": 1638000,
+"note": "Присоединена Россией в сентябре 2022 года; международно признана частью Украины, контролируется не полностью. Административный центр по российскому закону — Запорожье, но город контролируется Украиной, и администрация работает в Мелитополе. Площадь и население — довоенные данные по области (оценка на 2022 год).",
+"disputed": true
+},
+{
+"code": "UA-65",
+"name": "Херсонская область",
+"short": "Херсонская обл.",
+"type": "Область",
+"capital": "Херсон",
+"capitalLL": [
+32.6178,
+46.6354
+],
+"district": "—",
+"area": 28461,
+"pop": 1001000,
+"note": "Присоединена Россией в сентябре 2022 года; международно признана частью Украины, контролируется не полностью. Административный центр по российскому закону — Херсон, но город с ноября 2022 года контролируется Украиной, и администрация работает в Геническе. Площадь и население — довоенные данные по области (оценка на 2022 год).",
+"disputed": true
 }
 ];
