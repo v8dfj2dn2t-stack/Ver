@@ -321,7 +321,7 @@ function build() {
 
   regions.forEach(function (r) {
     var p = el('path', { d: r.d, class: 'region', fill: fillOf(r),
-                         'data-code': r.code });
+                         'data-code': r.code, 'shape-rendering': 'geometricPrecision' });
     r.el = p;
     gRegions.appendChild(p);
   });
@@ -442,8 +442,7 @@ function riverAngle(lb, win) {
 }
 
 function layoutLabels() {
-  var rect = svg.getBoundingClientRect();
-  var scale = (rect.width || VW) / VW;       // единицы карты -> px экрана
+  var scale = metrics().s;                   // единицы карты -> px экрана
   var items = [];
 
   // субъекты: сначала крупные, подпись всегда считается как «название + столица»,
@@ -534,9 +533,7 @@ function layoutLabels() {
 
 // каждый кадр меняется только масштаб текста и видимость — координаты фиксированы
 function updateLabels() {
-  var rect = svg.getBoundingClientRect();
-  var scale = (rect.width || VW) / VW;
-  var u = 1 / (view.k * scale);              // px -> единицы карты
+  var u = 1 / (view.k * metrics().s);        // px -> единицы карты
   var us = u.toFixed(4);
 
   regions.forEach(function (r) {
@@ -607,11 +604,21 @@ function zoomAt(px, py, factor) {
   clampView();
   applyView();
 }
-function svgPoint(evt) {
+// SVG вписан в контейнер по правилу meet: масштаб берётся по меньшей стороне,
+// а остаток добивается полями сверху-снизу или слева-справа. Без учёта этих
+// полей щелчок попадал мимо — со сдвигом вправо и вниз.
+function metrics() {
   var rect = svg.getBoundingClientRect();
-  var s = VW / rect.width;
-  return [(evt.clientX - rect.left) * s, (evt.clientY - rect.top) * s];
+  var s = Math.min((rect.width || VW) / VW, (rect.height || VH) / VH);
+  return { rect: rect, s: s,
+           ox: ((rect.width || VW) - VW * s) / 2,
+           oy: ((rect.height || VH) - VH * s) / 2 };
 }
+function clientToSvg(cx, cy, m) {
+  m = m || metrics();
+  return [(cx - m.rect.left - m.ox) / m.s, (cy - m.rect.top - m.oy) / m.s];
+}
+function svgPoint(evt) { return clientToSvg(evt.clientX, evt.clientY); }
 function mapPoint(evt) {
   var p = svgPoint(evt);
   return [(p[0] - view.x) / view.k, (p[1] - view.y) / view.k];
@@ -642,7 +649,9 @@ function select(code, zoom) {
   announce(selected ? selected.name + ', столица ' + selected.capital : 'Выбор снят');
   if (selected && zoom) zoomTo(selected.bbox, selected.mainArea < 400 ? 4 : 1.5);
   else scheduleLabels();
-  if (selected) {
+  // прокручиваем список к выбранному только когда панель на экране: у скрытой
+  // панели прокрутка цепляет соседние контейнеры и дёргает карту под пальцем
+  if (selected && !document.body.classList.contains('panel-hidden')) {
     var node = document.querySelector('.reg-item[data-code="' + code + '"]');
     if (node) node.scrollIntoView({ block: 'nearest' });
   }
@@ -696,7 +705,15 @@ function riversOf(r) {
   return found;
 }
 
+// Какой субъект под пальцем или курсором. Спрашиваем у самого браузера: он
+// проверяет попадание по нарисованному контуру, поэтому подсвечивается ровно то,
+// во что ткнули. Реки, озёра, границы и подписи нажатия не перехватывают.
 function regionAt(evt) {
+  var el = document.elementFromPoint(evt.clientX, evt.clientY);
+  var path = el && el.closest ? el.closest('.region') : null;
+  if (path) return byCode[path.getAttribute('data-code')] || null;
+  if (el && el.id !== 'map' && !(el.closest && el.closest('#stage'))) return null;
+  // запасной путь, если карта чем-то перекрыта: обычная проверка по полигонам
   var p = mapPoint(evt);
   for (var i = 0; i < regions.length; i++) {
     if (pointInRegion(p[0], p[1], regions[i])) return regions[i];
@@ -859,9 +876,8 @@ function flashRiver(rv) {
 
 function updateScaleBar() {
   // длина 1 внутренней единицы в километрах на широте центра экрана
-  var rect = svg.getBoundingClientRect();
   var px = 120;                                   // целевая длина плашки, px
-  var units = px * (VW / rect.width) / view.k;
+  var units = px / metrics().s / view.k;
   var kmPerUnit = 6371 / fit.k;                   // радианы проекции -> км
   var km = units * kmPerUnit;
   var nice = [10, 25, 50, 100, 250, 500, 1000, 2000, 5000];
@@ -880,12 +896,13 @@ function bindMap() {
   var drag = null;
 
   svg.addEventListener('mousedown', function (e) {
-    drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: 0 };
+    drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: 0,
+             s: 1 / metrics().s };
     svg.classList.add('grabbing');
   });
   window.addEventListener('mousemove', function (e) {
     if (drag) {
-      var rect = svg.getBoundingClientRect(), s = VW / rect.width;
+      var s = drag.s;
       view.x = drag.vx + (e.clientX - drag.x) * s;
       view.y = drag.vy + (e.clientY - drag.y) * s;
       drag.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
@@ -922,40 +939,80 @@ function bindMap() {
     zoomAt(p[0], p[1], Math.exp(-e.deltaY * (e.deltaMode ? 0.05 : 0.0016)));
   }, { passive: false });
 
-  // тач
-  var touch = null;
-  svg.addEventListener('touchstart', function (e) {
-    if (e.touches.length === 1) {
-      touch = { x: e.touches[0].clientX, y: e.touches[0].clientY, vx: view.x, vy: view.y };
-    } else if (e.touches.length === 2) {
-      touch = { d: tDist(e), k: view.k, c: tCenter(e), vx: view.x, vy: view.y };
+  // тач: один палец двигает карту, два — двигают и меняют масштаб одновременно.
+  // Точка между пальцами остаётся под ними, поэтому жест не «уплывает».
+  var touch = null, pending = null, frame = null;
+
+  function apply() {
+    frame = null;
+    if (!pending) return;
+    view.k = pending.k; view.x = pending.x; view.y = pending.y;
+    pending = null;
+    clampView();
+    applyView();
+  }
+  function queue(k, x, y) {
+    pending = { k: k, x: x, y: y };
+    if (!frame) frame = requestAnimationFrame(apply);   // не чаще кадра экрана
+  }
+  function gestureOn() {
+    svg.classList.add('zooming');
+    clearTimeout(touch && touch.offTimer);
+  }
+  function gestureOff() {
+    clearTimeout(gestureOff.t);
+    gestureOff.t = setTimeout(function () { svg.classList.remove('zooming'); }, 120);
+  }
+
+  function touchInfo(e) {
+    var m = metrics();
+    if (e.touches.length >= 2) {
+      var a = clientToSvg(e.touches[0].clientX, e.touches[0].clientY, m);
+      var b = clientToSvg(e.touches[1].clientX, e.touches[1].clientY, m);
+      return { c: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2],
+               d: Math.hypot(a[0] - b[0], a[1] - b[1]) };
     }
+    var p = clientToSvg(e.touches[0].clientX, e.touches[0].clientY, m);
+    return { c: p, d: 0 };
+  }
+
+  function startTouch(e) {
+    var t = touchInfo(e);
+    touch = { d0: t.d, c0: t.c, k0: view.k,
+              // точка карты под центром жеста — её и держим на месте
+              mx: (t.c[0] - view.x) / view.k, my: (t.c[1] - view.y) / view.k,
+              moved: 0 };
+  }
+
+  svg.addEventListener('touchstart', function (e) {
+    startTouch(e);
+    gestureOn();
   }, { passive: true });
+
   svg.addEventListener('touchmove', function (e) {
     if (!touch) return;
-    var rect = svg.getBoundingClientRect(), s = VW / rect.width;
-    if (e.touches.length === 1 && touch.x != null) {
-      view.x = touch.vx + (e.touches[0].clientX - touch.x) * s;
-      view.y = touch.vy + (e.touches[0].clientY - touch.y) * s;
-      clampView(); applyView();
-    } else if (e.touches.length === 2 && touch.d) {
-      var f = tDist(e) / touch.d;
-      var c = touch.c;
-      view.k = touch.k; view.x = touch.vx; view.y = touch.vy;
-      clampView();
-      zoomAt((c[0] - rect.left) * s, (c[1] - rect.top) * s, f * (touch.k / view.k));
-    }
     e.preventDefault();
+    var t = touchInfo(e);
+    var k = view.k;
+    if (t.d && touch.d0) {
+      k = Math.min(90, Math.max(0.85, touch.k0 * (t.d / touch.d0)));
+    }
+    touch.moved += Math.abs(t.c[0] - touch.c0[0]) + Math.abs(t.c[1] - touch.c0[1]);
+    queue(k, t.c[0] - touch.mx * k, t.c[1] - touch.my * k);
   }, { passive: false });
-  svg.addEventListener('touchend', function () { touch = null; }, { passive: true });
-  function tDist(e) {
-    return Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
-                      e.touches[0].clientY - e.touches[1].clientY);
-  }
-  function tCenter(e) {
-    return [(e.touches[0].clientX + e.touches[1].clientX) / 2,
-            (e.touches[0].clientY + e.touches[1].clientY) / 2];
-  }
+
+  svg.addEventListener('touchend', function (e) {
+    if (frame) { cancelAnimationFrame(frame); apply(); }
+    if (e.touches.length) { startTouch(e); return; }   // палец убрали — жест продолжается
+    if (touch && touch.moved < 8 && e.changedTouches.length === 1) {
+      var r = regionAt(e.changedTouches[0]);
+      select(r ? r.code : null, false);
+    }
+    touch = null;
+    gestureOff();
+  }, { passive: true });
+
+  svg.addEventListener('touchcancel', function () { touch = null; gestureOff(); }, { passive: true });
 
   var resizeTimer = null;
   window.addEventListener('resize', function () {
@@ -1017,10 +1074,18 @@ function bindControls() {
   document.getElementById('zoom-reset').addEventListener('click', resetView);
   document.getElementById('download').addEventListener('click', downloadSVG);
   var sideBtn = document.getElementById('sidebar-toggle');
+  var sideTxt = document.getElementById('sidebar-toggle-text');
+  function setPanel(hidden) {
+    document.body.classList.toggle('panel-hidden', hidden);
+    sideBtn.setAttribute('aria-expanded', hidden ? 'false' : 'true');
+    sideTxt.textContent = hidden ? 'Показать панель' : 'Скрыть панель';
+    // ширина карты изменилась — раскладку подписей и линейку надо пересчитать
+    setTimeout(function () { layoutLabels(); updateScaleBar(); }, 240);
+  }
   sideBtn.addEventListener('click', function () {
-    var open = document.body.classList.toggle('sidebar-open');
-    sideBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    setPanel(!document.body.classList.contains('panel-hidden'));
   });
+  setPanel(window.innerWidth <= 900);      // на телефоне панель по умолчанию свёрнута
 }
 
 function downloadSVG() {
