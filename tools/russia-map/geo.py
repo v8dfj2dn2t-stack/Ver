@@ -28,10 +28,16 @@ def bbox(polys):
 
 # ---- federal subjects -------------------------------------------------------
 src = json.load(open(os.path.join(SC, 'ru_regions_40.json')))
+# Natural Earth хранит эти шесть под украинскими кодами ISO — приводим к RU-…,
+# чтобы во всём проекте код региона был в одном формате
+RENAME = {'UA-43': 'RU-CR', 'UA-40': 'RU-SEV', 'UA-09': 'RU-LNR',
+          'UA-14': 'RU-DNR', 'UA-23': 'RU-ZAP', 'UA-65': 'RU-KHE',
+          'RU-X01~': 'RU-YAN'}                     # small Kara Sea island off Yamal
+
 regions = {}
 for f in src['features']:
     code = f['properties']['iso_3166_2']
-    if code == 'RU-X01~': code = 'RU-YAN'          # small Kara Sea island off Yamal
+    code = RENAME.get(code, code)
     regions.setdefault(code, []).extend(rings(f['geometry']))
 regions = {k: round_poly(v, 3) for k, v in regions.items()}
 print('regions:', len(regions))
